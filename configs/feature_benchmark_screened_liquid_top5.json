@@ -1,0 +1,69 @@
+{
+  "experiment_name": "feature_benchmark_screened_liquid_top5_walk_forward",
+  "paths": {
+    "project_root": ".",
+    "dataset_dir": "dataset",
+    "outputs_dir": "outputs",
+    "logs_dir": "logs",
+    "configs_dir": "configs"
+  },
+  "data": {
+    "daily_file": "dataset/stock_market_19_24.csv",
+    "target_file": "dataset/min_max_return.csv",
+    "aggregation_mode": "weekly",
+    "feature_set": "screened_liquid_top5",
+    "window_size": 8,
+    "split_idx": -4
+  },
+  "graph": {
+    "graph_mode": "hybrid",
+    "top_k": 4,
+    "use_arm": false,
+    "use_static_graph": true,
+    "similarity_metric": "pearson",
+    "corr_threshold": 0.7
+  },
+  "model": {
+    "model_type": "deep",
+    "in_features": 9,
+    "gnn_hidden": 128,
+    "lstm_hidden": 256,
+    "heads": 2,
+    "dropout": 0.6
+  },
+  "loss": {
+    "name": "mse"
+  },
+  "training": {
+    "epochs": 30,
+    "learning_rate": 0.001,
+    "weight_decay": 0.00001,
+    "print_every": 1,
+    "early_stopping_patience": 10,
+    "warmup_epochs": 5,
+    "min_delta": 0.0001,
+    "use_scheduler": true
+  },
+  "runtime": {
+    "random_seed": 42,
+    "device": "auto",
+    "save_checkpoint": false,
+    "save_plots": false,
+    "show_plots": false
+  },
+  "benchmark": {
+    "output_dir": "logs/feature_benchmarks/screened_liquid_top5",
+    "protocol": "walk_forward",
+    "seeds": [42, 52, 62],
+    "gnn_epochs": 80,
+    "baseline_epochs": 80,
+    "device": "auto",
+    "n_folds": 5,
+    "n_runs": 3,
+    "include_statistical_models": false,
+    "validation_split": 0.1,
+    "early_stopping_patience": 8,
+    "min_train_size": 150,
+    "test_step": 15
+  }
+}

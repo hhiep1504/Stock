@@ -1,0 +1,671 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[vietnamese]{babel}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\usepackage{longtable}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc,fit,backgrounds,decorations.pathreplacing,babel}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\geometry{a4paper, margin=2.2cm}
+
+\definecolor{hdr}{RGB}{25,55,95}
+\definecolor{boxg}{RGB}{240,245,252}
+\definecolor{edgeS}{RGB}{50,120,180}
+\definecolor{edgeD}{RGB}{200,90,40}
+\hypersetup{colorlinks=true, linkcolor=hdr, urlcolor=hdr, citecolor=hdr}
+
+% TikZ styles
+\tikzset{
+  block/.style={rectangle, rounded corners, draw=hdr, fill=boxg, thick, minimum width=2.8cm, minimum height=0.9cm, align=center, font=\small},
+  arrow/.style={-{Stealth[length=2.2mm]}, thick, hdr},
+  node distance=0.65cm and 1.0cm
+}
+
+\title{\textcolor{hdr}{\textbf{Dự báo Khoảng Sinh lợi Đa mã trên Thị trường Việt Nam:\\
+Kiến trúc Lai Graph Attention -- LSTM và Đánh giá Định lượng}}}
+\author{---}
+\date{Tháng 4 năm 2026}
+
+\begin{document}
+\maketitle
+
+%==============================================================================
+\begin{abstract}
+\noindent
+\textbf{Bối cảnh.} Dự báo chuỗi giá chứng khoán là bài toán phi tuyến, chịu nhiễu cao và thay đổi chế độ (concept drift). Các mô hình chỉ xem xét từng mã độc lập bỏ qua cấu trúc liên kết ngành và đồng biến động giữa các mã; ngược lại, mô hình đồ thị thuần túy có thể không bắt kịp động thái tuần tự ngắn hạn.
+
+\textbf{Đóng góp.} Chúng tôi trình bày một hệ thống học sâu end-to-end dự báo \emph{khoảng} sinh lợi trong kỳ (biên downside và upside so với giá mở đầu kỳ) cho $N$ mã cổ phiếu, kết hợp \textbf{Graph Attention Network (GAT)} trên đồ thị lai (cạnh tĩnh theo ngành + cạnh động KNN theo độ tương đồng trong cửa sổ nhìn lại) và \textbf{LSTM} trên chuỗi embedding không gian theo thời gian. Hàm mất mát kết hợp bình phương trung bình, phạt một trừ tương quan Pearson trên nhánh biên dưới, và phạt an toàn khi dự báo thấp hơn thực tế ở nhánh downside.
+
+\textbf{Thực nghiệm.} Siêu tham số được tối ưu bằng \textbf{Optuna} (TPE). Trên một thiết lập đại diện (26 mã, gom tuần ISO, cửa sổ $W{=}12$, 274 chuỗi, tách thời gian train $[0,210)$ và kiểm tra $[210,225)$), mô hình GAT--LSTM đạt MAE khoảng trung bình \textbf{0.024024}, thấp hơn LSTM thuần (0.02439), CNN--LSTM (0.02454), GRU (0.02537) và GCN-only (0.02561) trong cùng điều kiện so sánh. Chênh lệch tuyệt đối so với LSTM mạnh nhất trong nhóm baseline tuần tự là $\approx 1{,}5\times 10^{-3}$ về đơn vị MAE --- biên độ nhỏ, cần được diễn giải cùng kiểm định thống kê và chi phí giao dịch trước khi suy ra lợi ích kinh tế.
+
+\textbf{Từ khóa:} dự báo khoảng; Graph Attention; LSTM; đồ thị lai; Optuna; đánh giá theo thời gian.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Giới thiệu}
+
+Thị trường chứng khoán là hệ phức hợp trong đó giá cổ phiếu vừa là chuỗi thời gian vừa là một phần của mạng lưới quan hệ kinh tế (cùng ngành, chuỗi cung ứng, tương quan đầu tư). Giả thuyết thị trường hiệu quả (EMH) gợi ý rằng thông tin công khai được phản ánh nhanh vào giá; tuy nhiên trong thực nghiệm vẫn tồn tại cấu trúc thống kê yếu, đặc biệt ở quy mô đa tài sản và đa kỳ. Hướng tiếp cận học sâu lai \emph{không gian--thời gian} --- dùng GNN để tổng hợp thông tin láng giềng có trọng số chú ý, và RNN/LSTM để ghi nhớ tiến trình --- phù hợp với bài toán dự báo đồng thời nhiều chuỗi có phụ thuộc chéo.
+
+Bài báo này mô tả trọn vẹn phương pháp luận, dữ liệu, kiến trúc, hàm mất mát, thủ tục huấn luyện, và kết quả định lượng trên một pipeline đã triển khai (Python, PyTorch, PyTorch Geometric), kèm hình vẽ minh họa và bảng số liệu chi tiết. Phần cuối nêu giới hạn và hướng mở rộng; tài liệu tham khảo được liệt kê ở cuối bài.
+
+%==============================================================================
+\section{Tổng quan tài liệu}
+
+Các mô hình thống kê cổ điển (ARIMA, GARCH) phù hợp với cấu trúc tuyến tính và phương sai có điều kiện nhưng kém linh hoạt khi có cú sốc chế độ. Học máy dạng bảng (Random Forest, Gradient Boosting) xử lý phi tuyến tốt nhưng đòi hỏi đặc trưng tay chơi nhiều và không mô hình hóa tự nhiên phụ thuộc thứ tự thời gian đa biến. Học sâu chuỗy (LSTM, GRU) khắc phục phần nào nhưng thường xử lý từng tài sản riêng lẻ hoặc ghép đặc trưng mà không có cấu trúc đồ thị rõ ràng. Graph Neural Networks mở rộng không gian trạng thái lên miền có cấu trúc; GAT cụ thể học trọng số chú ý trên láng giềng, phù hợp khi mức độ liên quan giữa các mã không đồng đều. Các nghiên cứu gần đây trong tài chính định lượng kết hợp GNN với RNN cho dữ liệu spatio-temporal; bài báo này bám sát triển khai cụ thể với đồ thị lai và dự báo khoảng.
+
+%==============================================================================
+\section{Phát biểu bài toán}
+
+\subsection{Ký hiệu}
+Cho tập mã $i=1,\ldots,N$. Với mỗi kỳ (tuần ISO hoặc quý) $t$, ký hiệu giá mở đầu kỳ $P^{\mathrm{open}}_{t,i}$, giá đóng cửa nhỏ nhất và lớn nhất trong kỳ lần lượt $P^{\min}_{t,i}$, $P^{\max}_{t,i}$ (tính trên các quan sát ngày trong kỳ). Định nghĩa hai biên sinh lợi so với giá mở:
+\begin{equation}
+  r^{\min}_{t,i} = \frac{P^{\min}_{t,i} - P^{\mathrm{open}}_{t,i}}{P^{\mathrm{open}}_{t,i}}, \qquad
+  r^{\max}_{t,i} = \frac{P^{\max}_{t,i} - P^{\mathrm{open}}_{t,i}}{P^{\mathrm{open}}_{t,i}}.
+\end{equation}
+Mục tiêu: với cửa sổ nhìn lại độ dài $W$ kỳ của đặc trưng đã chuẩn hóa, học ánh xạ
+\begin{equation}
+  f_\theta: \big( \{X_{t-W+1:t}\},\ \mathcal{G}_t \big) \mapsto \{(\hat r^{\min}_{t,i},\ \hat r^{\max}_{t,i})\}_{i=1}^N,
+\end{equation}
+trong đó $\mathcal{G}_t=(\mathcal{V},\mathcal{E}_t)$ là đồ thị vô hướng trên $N$ nút (mỗi nút là một mã).
+
+\subsection{Vì sao dự báo khoảng?}
+Khoảng $[r^{\min}, r^{\max}]$ mô tả đồng thời biên downside, upside và độ rộng $\Delta r = r^{\max}-r^{\min}$ (proxy biến động nội kỳ), hữu ích hơn điểm dự báo đơn trong bối cảnh quản trị rủi ro.
+
+%==============================================================================
+\section{Dữ liệu và tiền xử lý}
+
+\subsection{Nguồn và phạm vi}
+Dữ liệu gồm giá đóng cửa ngày trong khoảng \textbf{2019--2024} (tệp lịch sử tổng hợp, một dòng mỗi ngày, nhiều cột mã). Sau khi gom theo tuần ISO (\texttt{Year\_Week}) hoặc theo quý (\texttt{Year}, \texttt{Quarter}), số kỳ $T$ xác định chiều thời gian của tensor đặc trưng.
+
+\subsection{Làm sạch}
+Ngày được chuyển sang kiểu thời gian; dữ liệu sắp theo thời gian tăng dần. Chuỗi giá có lỗi định dạng (ví dụ chia cho không, ô trống) được ép kiểu số; giá trị thiếu được điền \textbf{forward-fill rồi back-fill} trên trục thời gian để giữ ngữ nghĩa ``giá đã biết gần nhất'', không dùng thông tin tương lai của chính nhãn.
+
+\subsection{Kích thước tensor (thiết lập thực nghiệm báo cáo số liệu)}
+Trong log pipeline benchmark (gom tuần, $W=12$): $N=26$ mã; số kỳ $T=286$; đặc trưng mỗi nút mỗi kỳ $F=4$; nhãn hai chiều. Ký hiệu:
+\begin{equation}
+  X \in \mathbb{R}^{T \times N \times F}, \qquad Y \in \mathbb{R}^{T \times N \times 2}.
+\end{equation}
+Số chuỗi có thể tạo bằng cắt trượt độ dài $W$ trên trục kỳ: $T_{\mathrm{seq}} = T - W$. Với $T=286$ và $W=12$ ta có \textbf{274} chuỗi tối đa. Một tách thời gian đại diện trong log benchmark: huấn luyện trên chỉ số chuỗi $0,\ldots,209$ (\textbf{210} mẫu), kiểm tra trên $210,\ldots,224$ (\textbf{15} bước) --- các chỉ số còn lại của không gian 274 chuỗi có thể dùng cho validation mở rộng hoặc không tham gia tách này tùy script.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Đại lượng} & \textbf{Giá trị (log benchmark)} \\
+\midrule
+Số mã $N$ & 26 \\
+Số đặc trưng mỗi nút $F$ & 4 \\
+Số kỳ $T$ (tensor sau gom) & 286 \\
+Kích thước $X$ & $(286,\,26,\,4)$ \\
+Kích thước $Y$ (nhãn) & $(286,\,26,\,2)$ \\
+Cửa sổ nhìn lại $W$ (tuần ISO) & 12 \\
+Tổng số chuỗi cắt trượt & 274 \\
+Cạnh đồ thị tĩnh (ngành) & 214 \\
+Tách train / test (chỉ số chuỗi) & $[0,210)$ / $[210,225)$ \\
+MAE tối nhất trong study Optuna (GAT--LSTM) & 0.028168 \\
+\bottomrule
+\end{tabular}
+\caption{Tóm tắt thiết lập số liệu tái lập từ log thực nghiệm.}
+\label{tab:meta}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.78, every node/.style={font=\small}]
+  \draw[fill=boxg, draw=hdr, thick, rounded corners] (0,0) rectangle (5.5,1.1);
+  \node at (2.75,0.55) {Tiền xử lý ngày};
+  \draw[arrow] (5.5,0.55) -- (6.3,0.55);
+  \draw[fill=boxg, draw=hdr, thick, rounded corners] (6.3,0) rectangle (11.2,1.1);
+  \node at (8.75,0.55) {Gom kỳ (tuần / quý)};
+  \draw[arrow] (11.2,0.55) -- (12,0.55);
+  \draw[fill=boxg, draw=hdr, thick, rounded corners] (12,0) rectangle (16.8,1.1);
+  \node at (14.4,0.55) {Đặc trưng + nhãn};
+  \draw[arrow] (16.8,0.55) -- (17.6,0.55);
+  \draw[fill=boxg, draw=hdr, thick, rounded corners] (17.6,0) rectangle (22.5,1.1);
+  \node at (20.05,0.55) {Chuẩn hóa + cửa sổ $W$};
+\end{tikzpicture}
+\caption{Luồng dữ liệu từ giá ngày đến tensor chuỗy.}
+\label{fig:pipeline-data}
+\end{figure}
+
+%==============================================================================
+\section{Đặc trưng và nhãn}
+
+\subsection{Bốn đặc trưng đầu vào (mỗi mã, mỗi kỳ)}
+Gọi nhóm giá theo kỳ là $P_{t,i}$ (vector giá ngày của mã $i$ trong kỳ $t$). Các đặc trưng được tính như sau.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}c L{3.2cm} L{6.8cm}@{}}
+\toprule
+\textbf{\#} & \textbf{Tên} & \textbf{Công thức} \\
+\midrule
+1 & Log biến động & $\ln(1 + \mathrm{std}(P_{t,i}))$ \\
+2 & Log mức giá & $\ln(1 + \mathrm{mean}(P_{t,i}))$ \\
+3 & Log return đầu--cuối kỳ & $\ln\!\big((P^{\mathrm{end}}_{t,i}+\varepsilon)/(P^{\mathrm{start}}_{t,i}+\varepsilon)\big)$ với $\varepsilon=10^{-8}$ \\
+4 & Độ lệch return nội kỳ & $\mathrm{skew}\big(\Delta P/P\big)$ trên các ngày trong kỳ; thiếu thì 0 \\
+\bottomrule
+\end{tabular}
+\caption{Bốn đặc trưng đầu vào trên mỗi nút và mỗi kỳ.}
+\label{tab:features}
+\end{table}
+
+\subsection{Chuẩn hóa}
+Ma trận đặc trưng $(N,4)$ tại mỗi kỳ được xếp chồng; \texttt{StandardScaler} (trung bình 0, phương sai 1) được \textbf{fit chỉ trên tập huấn luyện} của lần tách hiện tại, rồi áp cho cả kiểm tra --- tránh rò rỉ thống kê.
+
+\subsection{Cửa sổ chuỗy}
+Với chỉ số bắt đầu $i$:
+\begin{equation}
+  x_{\mathrm{seq}} = X[i:i+W] \in \mathbb{R}^{W \times N \times 4}, \qquad
+  y = Y[i+W] \in \mathbb{R}^{N \times 2}.
+\end{equation}
+
+%==============================================================================
+\section{Xây dựng đồ thị lai}
+
+\subsection{Đồ thị tĩnh theo ngành}
+Hai mã $i,j$ được nối cạnh nếu cùng một ngành kinh tế và ngành khác \texttt{Unknown}. Cạnh vô hướng. Ví dụ phân bổ ngành trong thực nghiệm (một phần danh sách đại diện):
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}L{2.8cm} L{11.2cm}@{}}
+\toprule
+\textbf{Ngành} & \textbf{Mã} \\
+\midrule
+Bất động sản / xây dựng dân dụng & VHM, NVL, PDR, NLG, KDH, DXG, VPI, NTL, DIG, TCH, CRE, CCL, HDC, ITC \\
+Công nghiệp & LHG, SZL, TIP, TIX, KBC \\
+Xây dựng / hạ tầng & TDC, HDG, CDC, D2D \\
+\bottomrule
+\end{tabular}
+\caption{Ánh xạ ngành--mã dùng cho đồ thị tĩnh (minh họa theo cấu hình thực nghiệm).}
+\label{tab:sectors}
+\end{table}
+
+Trong log benchmark: \textbf{214 cạnh} tĩnh trên \textbf{26 nút}.
+
+\subsection{Đồ thị động (KNN trên độ tương đồng)}
+Với mỗi chuỗi huấn luyện/kiểm tra, lấy ma trận giá ngày trong cửa sổ nhìn lại, tính ma trận tương đồng cặp:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Pearson:} $\rho_{ij} = \mathrm{Cov}(x_i,x_j)/(\sigma_i\sigma_j)$, dùng $|\rho_{ij}|$.
+  \item \textbf{Cosine (mặc định trong nhiều thử nghiệm):} $\cos(x_i,x_j) = (x_i\cdot x_j)/(\|x_i\|\|x_j\|)$ với chuẩn hóa $\hat x_i = x_i/\max(\|x_i\|,\varepsilon)$, $\varepsilon=10^{-8}$.
+\end{itemize}
+Với mỗi nút $i$, giữ tối đa \textbf{top-$K$} láng giềng có điểm $\ge \tau$ (ngưỡng, ví dụ $\tau\in\{0.7,0.8,0.9\}$; mặc định thử nghiệm $\tau=0.7$). Đối xứng hóa cạnh, loại trùng. Tập cạnh cuối:
+\begin{equation}
+  \mathcal{E}_t = \mathcal{E}_{\mathrm{static}} \cup \mathcal{E}^{\mathrm{KNN}}_t.
+\end{equation}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.95]
+  % nodes
+  \foreach \i/\x/\y in {1/0/2, 2/1.5/3.2, 3/3/2, 4/1.5/0.8, 5/4.2/2.5, 6/5.5/1.2}
+    \node[circle, draw=hdr, fill=white, minimum size=0.55cm, font=\scriptsize] (n\i) at (\x,\y) {$s_{\i}$};
+  % static edges (thick blue)
+  \draw[edgeS, very thick] (n1) -- (n2) -- (n3);
+  \draw[edgeS, very thick] (n4) -- (n1);
+  \draw[edgeS, very thick] (n2) -- (n4);
+  % dynamic edges (dashed orange)
+  \draw[edgeD, dashed, very thick] (n3) -- (n5) -- (n6);
+  \draw[edgeD, dashed, very thick] (n2) .. controls (3.5,4) .. (n5);
+  \begin{scope}[on background layer]
+    \node[rounded corners, draw=gray!60, fill=gray!8, fit=(n1)(n2)(n3)(n4), inner sep=14pt] {};
+    \node[anchor=south west, font=\scriptsize] at (-0.6,3.6) {Cạnh tĩnh (cùng ngành)};
+    \node[anchor=south east, font=\scriptsize] at (6.2,0.3) {Cạnh động (KNN)};
+  \end{scope}
+\end{tikzpicture}
+\caption{Minh họa ý tưởng: cạnh tĩnh (nét liền) neo ngành; cạnh động (nét đứt) phụ thuộc cửa sổ.}
+\label{fig:hybrid-graph}
+\end{figure}
+
+%==============================================================================
+\section{Kiến trúc GAT--LSTM}
+
+\subsection{Ý tưởng trực quan (trước khi đọc công thức)}
+\textbf{GAT --- ``nghe láng giềng nhưng không đều nhau''.} Tại mỗi bước thời gian $t$, mỗi cổ phiếu là một \emph{nút} trên đồ thị. GAT không lấy trung bình cứng các láng giềng mà gán mỗi láng giềng một hệ số $\alpha$ (chú ý): láng giềng giống hành vi giá với mã đang xét thì $\alpha$ lớn --- minh họa bằng mũi tên \emph{đậm} hơn. Tổng các $\alpha$ trên láng giềng được chuẩn hóa (như softmax), nên có thể xem đây là cách ``phân phối sự chú ý'' giữa các mã liên quan.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.95, every node/.style={font=\small}]
+  % Nút trung tâm (mã đang dự báo)
+  \node[circle, draw=hdr, line width=1.1pt, fill=yellow!25, minimum size=1.05cm, inner sep=0pt] (ci) at (0,0) {$i$};
+  \node[above=0.06cm of ci, font=\scriptsize\bfseries] {};
+
+  % Láng giềng + mũi tên với độ dày theo alpha
+  \node[circle, draw=gray!70, fill=white, minimum size=0.52cm, inner sep=0pt, font=\scriptsize] (j1) at (2.35,1.35) {$j_1$};
+  \node[circle, draw=gray!70, fill=white, minimum size=0.52cm, inner sep=0pt, font=\scriptsize] (j2) at (2.65,0.15) {$j_2$};
+  \node[circle, draw=gray!70, fill=white, minimum size=0.52cm, inner sep=0pt, font=\scriptsize] (j3) at (2.35,-1.25) {$j_3$};
+  \node[circle, draw=gray!70, fill=white, minimum size=0.52cm, inner sep=0pt, font=\scriptsize] (j4) at (-2.15,0.9) {$j_4$};
+
+  \draw[-{Stealth}, line width=2.8pt, blue!65!black] (j1) -- (ci) node[midway, sloped, above, font=\scriptsize, yshift=2pt] {$0{,}45$};
+  \draw[-{Stealth}, line width=1.9pt, blue!50!black] (j2) -- (ci) node[midway, below, font=\scriptsize, yshift=-1pt] {$0{,}28$};
+  \draw[-{Stealth}, line width=1.2pt, blue!40!black] (j3) -- (ci) node[midway, sloped, below, font=\scriptsize] {$0{,}17$};
+  \draw[-{Stealth}, line width=0.75pt, gray!60] (j4) -- (ci) node[midway, sloped, above, font=\scriptsize] {$0{,}10$};
+
+  \node[below=1.35cm of ci, font=\scriptsize, align=center, text width=9.2cm] {Số trên mũi tên là ví dụ minh họa $\alpha_{ij}$ (càng đậm $\Rightarrow$ chú ý càng lớn).\\Tổng ví dụ $=1$; trên đồ thị thật, $\alpha$ được \emph{học} từ dữ liệu.};
+\end{tikzpicture}
+\caption{\textbf{GAT (trực quan):} mỗi láng giềng đóng góp một phần không đều nhau vào nút $i$. Đây là khác biệt chính so với ``trung bình láng giềng'' cổ điển.}
+\label{fig:gat-attention-idea}
+\end{figure}
+
+% Preamble cần có
+
+\textbf{LSTM --- ``ghi lại diễn biến sau khi đã gom tin từ thị trường''.} GAT chạy lần lượt cho $t=1,\ldots,W$ trong cửa sổ; với \emph{mỗi} mã $i$, ta được một chuỗi vector $z_{1,i},\ldots,z_{W,i}$ (đã chứa thông tin láng giềng). LSTM đọc chuỗi đó theo thứ tự thời gian và tóm tắt vào trạng thái cuối $h_{W}$ rồi mới đưa ra $(\hat r^{\min},\hat r^{\max})$. Nói ngắn gọn: \emph{GAT xử lý chiều ``ai ảnh hưởng ai''; LSTM xử lý chiều ``trước đó đến giờ diễn biến thế nào''}.
+
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  node distance=1.2cm and 1.1cm,
+  every node/.style={font=\footnotesize},
+  gat/.style={draw, rounded corners=2pt, fill=blue!6, minimum width=1.1cm, minimum height=1.2cm, align=center},
+  lstm/.style={draw, rounded corners=2pt, fill=green!8, minimum width=1.0cm, minimum height=0.7cm, align=center},
+  emb/.style={circle, draw=black!40, minimum size=0.45cm, inner sep=0pt},
+  arrow/.style={-{Stealth[length=2mm]}, thick},
+  dashedarrow/.style={dashed, gray!60}
+]
+
+% ===== Row 1: GAT over time =====
+\node[font=\bfseries, anchor=west] (title1) {(1) Temporal window $W$};
+
+\node[gat, below=0.7cm of title1] (g1) {GAT\\$t=1$};
+\node[gat, right=of g1] (g2) {GAT\\$t=2$};
+\node[gat, right=of g2] (g3) {GAT\\$t=3$};
+\node[gat, right=of g3] (g4) {GAT\\$t=4$};
+\node[gat, right=of g4] (g5) {GAT\\$t=5$};
+
+\node[right=0.6cm of g5] {$\cdots$};
+
+% Embeddings
+\foreach \i/\g in {1/g1,2/g2,3/g3,4/g4,5/g5} {
+  \node[emb, below=0.55cm of \g] (z\i) {$z_{\i,i}$};
+  \draw[dashedarrow] (\g) -- (z\i);
+}
+
+\node[font=\scriptsize, align=center, right=0.6cm of z5]
+{same asset $i$};
+
+% ===== Row 2: LSTM =====
+\node[font=\bfseries, anchor=west, below=1.5cm of z1] (title2)
+{(2) Sequence for asset $i$};
+
+\node[lstm, below=0.6cm of title2] (l1) {LSTM};
+\node[lstm, right=of l1] (l2) {LSTM};
+\node[lstm, right=of l2] (l3) {LSTM};
+\node[lstm, right=of l3] (l4) {LSTM};
+\node[lstm, right=of l4] (l5) {LSTM};
+
+\node[right=0.6cm of l5] {$\cdots$};
+
+% Horizontal flow
+\foreach \i/\j in {1/2,2/3,3/4,4/5} {
+  \draw[arrow] (l\i) -- (l\j);
+}
+
+% Vertical alignment (VERY IMPORTANT visually)
+\foreach \i in {1,2,3,4,5} {
+  \draw[dashedarrow] (z\i) -- (l\i);
+}
+
+% Output
+\node[draw, rounded corners=2pt, fill=yellow!12,
+      minimum width=1.4cm, minimum height=0.7cm,
+      right=1.2cm of l5] (out)
+{$(\hat r^{\min},\,\hat r^{\max})$};
+
+\draw[arrow] (l5) -- (out);
+
+\node[font=\scriptsize, align=center, below=0.3cm of out]
+{final hidden state};
+
+\end{tikzpicture}
+
+\caption{
+\textbf{Spatio-temporal modeling with GAT + LSTM.}
+At each time step $t$, a graph attention layer encodes cross-asset interactions,
+producing node embeddings $z_{t,i}$.
+For a fixed asset $i$, embeddings across the window form a temporal sequence
+processed by an LSTM, whose final hidden state is mapped to prediction bounds.
+}
+\label{fig:gat-lstm}
+\end{figure}
+
+\subsection{GAT một lớp}
+Với vector nút $h^{(0)}_i = x_{t,i}$, hệ số chú ý (Veličković et al.) và cập nhật:
+\begin{equation}
+  \alpha_{ij} = \frac{\exp\!\big(\mathrm{LeakyReLU}(\mathbf{a}^\top [\mathbf{W}h_i \| \mathbf{W}h_j])\big)}
+  {\sum_{k\in\mathcal{N}(i)} \exp\!\big(\mathrm{LeakyReLU}(\mathbf{a}^\top [\mathbf{W}h_i \| \mathbf{W}h_k])\big)}, \qquad
+  h^{(1)}_i = \mathrm{ELU}\!\Big(\sum_{j\in\mathcal{N}(i)} \alpha_{ij}\,\mathbf{W}h^{(0)}_j\Big).
+\end{equation}
+Với $K$ đầu attention, đầu ra ghép (concat) hoặc trung bình tùy tầng.
+
+\subsection{LSTM}
+Với mỗi mã $i$, chuỗi $\{z_{t,i}\}_{t=1}^W$ với $z_{t,i}\in\mathbb{R}^{d_z}$ là đầu ra GAT tại bước $t$:
+\begin{equation}
+  (h_t, c_t) = \mathrm{LSTM}(z_{t,i}, h_{t-1}, c_{t-1}), \qquad
+  (\hat r^{\min}_i, \hat r^{\max}_i) = \mathbf{W}_{\mathrm{out}} h_{W}.
+\end{equation}
+Chỉ trạng thái ẩn cuối $h_W$ được đưa qua lớp tuyến tính ra hai nhánh.
+
+\subsection{Hai biến thể triển khai}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Một lớp GAT:} \texttt{GATConv}$(F \to d_{\mathrm{g}})$, đa đầu, ELU, LSTM$(d_{\mathrm{g}}\cdot K \to d_{\mathrm{l}})$, \texttt{Linear}$(d_{\mathrm{l}} \to 2)$. Dropout attention (ví dụ 0.6) và dropout nội LSTM (0.2) trong mã nguồn tham số mặc định.
+  \item \textbf{Hai lớp GAT:} tầng đầu concat đầu, tầng hai gộp đầu (\texttt{concat=False}), chiều vào LSTM là $d_{\mathrm{g}}$.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.5cm]
+  \node[block] (in) {Đầu vào\\$X\in\mathbb{R}^{W\times N\times F}$};
+  \node[block, below=of in] (gat) {GAT theo $t=1..W$\\$+$ \texttt{edge\_index}};
+  \node[block, below=of gat] (stack) {Xếp chuỗi\\$[W\times N\times d]$};
+  \node[block, below=of stack] (perm) {Hoán vị theo mã\\$[N\times W\times d]$};
+  \node[block, below=of perm] (lstm) {LSTM};
+  \node[block, below=of lstm] (out) {Linear $\to$ $(\hat r^{\min},\hat r^{\max})$};
+  \draw[arrow] (in) -- (gat);
+  \draw[arrow] (gat) -- (stack);
+  \draw[arrow] (stack) -- (perm);
+  \draw[arrow] (perm) -- (lstm);
+  \draw[arrow] (lstm) -- (out);
+\end{tikzpicture}
+\caption{Luồng tính toán GAT--LSTM (một nút ra hai biên sau khi LSTM theo trục thời gian cho từng mã).}
+\label{fig:arch}
+\end{figure}
+
+%==============================================================================
+\section{Hàm mất mát và huấn luyện}
+
+\subsection{CorrelationLoss (mặc định trong thử nghiệm chính)}
+Gọi $\hat{\mathbf{r}}^{\min}, \mathbf{r}^{\min}$ là vector dự báo và thực tế của biên dưới trên $N$ mã tại một bước. Thành phần:
+\begin{align}
+  \mathcal{L}_{\mathrm{MSE}} &= \frac{1}{2N}\sum_i \Big[(\hat r^{\min}_i-r^{\min}_i)^2 + (\hat r^{\max}_i-r^{\max}_i)^2\Big]
+  \quad \text{(tương đương \texttt{MSELoss} trên tensor $[N,2]$)}, \\
+  \mathcal{L}_{\mathrm{corr}} &= 1 - \rho(\hat{\mathbf{r}}^{\min}, \mathbf{r}^{\min}), \\
+  \mathcal{L}_{\mathrm{risk}} &= \frac{1}{N}\sum_i \max(0,\ \hat r^{\min}_i - r^{\min}_i).
+\end{align}
+Tổng hợp $\mathcal{L} = w_{\mathrm{mse}}\mathcal{L}_{\mathrm{MSE}} + w_{\mathrm{corr}}\mathcal{L}_{\mathrm{corr}} + w_{\mathrm{risk}}\mathcal{L}_{\mathrm{risk}}$. Giá trị mặc định trong lớp \texttt{CorrelationLoss} của mã nguồn: $w_{\mathrm{mse}}=0{,}3$, $w_{\mathrm{corr}}=0{,}6$, $w_{\mathrm{risk}}=0{,}1$. Có thể đặt $(0{,}45,0{,}45,0{,}10)$ trong cấu hình thử nghiệm để cân bằng hơn giữa khớp độ lớn và xếp hạng.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=0.35cm]
+  \node[draw=hdr, rounded corners, fill=boxg, minimum width=3.6cm, minimum height=0.85cm, font=\small, align=center] (mse) {$w_{\mathrm{mse}}\mathcal{L}_{\mathrm{MSE}}$};
+  \node[draw=hdr, rounded corners, fill=boxg, minimum width=3.6cm, minimum height=0.85cm, font=\small, align=center, below=of mse] (corr) {$w_{\mathrm{corr}}\mathcal{L}_{\mathrm{corr}}$};
+  \node[draw=hdr, rounded corners, fill=boxg, minimum width=3.6cm, minimum height=0.85cm, font=\small, align=center, below=of corr] (risk) {$w_{\mathrm{risk}}\mathcal{L}_{\mathrm{risk}}$};
+  \node[draw=hdr, rounded corners, fill=yellow!12, minimum width=3.8cm, minimum height=1cm, font=\small\bfseries, align=center, below=1.1cm of risk] (sum) {$\mathcal{L}$ (tối thiểu hóa)};
+  \draw[arrow] (mse.south) -- ++(0,-0.15) -| (sum.north);
+  \draw[arrow] (corr.south) -- (sum.north);
+  \draw[arrow] (risk.south) -- ++(0,-0.15) -| (sum.north);
+\end{tikzpicture}
+\caption{Phân rã tổng hàm mất mát \texttt{CorrelationLoss} (trọng số mặc định 0.3 / 0.6 / 0.1).}
+\label{fig:loss}
+\end{figure}
+
+\subsection{Tối ưu và điều chế}
+Tối ưu Adam; lịch học cosine sau warm-up tuyến tính vài epoch đầu; cắt gradient chuẩn L2 với $\|\cdot\| \le 1$; dừng sớm nếu không cải thiện tối thiểu $\delta=10^{-4}$ trong 30 epoch liên tiếp; hỗ trợ mixed precision trên GPU.
+
+%==============================================================================
+\section{Độ đo đánh giá}
+
+Trên tập kiểm tra, với mỗi bước thời gian trung bình theo mã rồi trung bình theo các bước:
+\begin{equation}
+  \mathrm{MAE}_{\min} = \frac{1}{T_{\mathrm{test}}}\sum_t \frac{1}{N}\sum_i |\hat r^{\min}_{t,i}-r^{\min}_{t,i}|, \quad
+  \mathrm{MAE}_{\max} = \frac{1}{T_{\mathrm{test}}}\sum_t \frac{1}{N}\sum_i |\hat r^{\max}_{t,i}-r^{\max}_{t,i}|,
+\end{equation}
+\begin{equation}
+  \mathrm{MAE}_{\mathrm{interval}} = \tfrac{1}{2}(\mathrm{MAE}_{\min}+\mathrm{MAE}_{\max}).
+\end{equation}
+Tương tự cho MSE. Thống kê hậu kiểm: tỷ số độ rộng dự báo/thực tế và độ lệch độ rộng để phát hiện ``co khoảng'' (interval collapse).
+
+%==============================================================================
+\section{Thiết kế thực nghiệm}
+
+\subsection{Tối ưu siêu tham số (Optuna, TPE)}
+Optuna quản lý nhiều \emph{trial}: mỗi trial chọn một vector siêu tham số $\theta$ (learning rate, kích thước ẩn, dropout, v.v.), huấn luyện mô hình, rồi trả về một số MAE (hoặc loss) làm \textbf{giá trị mục tiêu cần nhỏ}. Thuật toán mặc định phổ biến là \textbf{TPE} (Tree-structured Parzen Estimator) --- không dùng lưới đều như grid search, cũng không chỉ thử ngẫu nhiên thuần túy mãi.
+
+\paragraph{Trực quan cơ chế TPE (hai ý chính).}
+\textbf{(i) Học từ các trial trước.} Sau vài chục lần thử, TPE \emph{tách} các trial thành nhóm \emph{tốt} (MAE thấp, ví dụ nhóm 25\% tốt nhất) và nhóm \emph{xấu} hơn. Thay vì mô hình hóa trực tiếp $p(\mathrm{MAE}\mid\theta)$, TPE ước lượng hai mật độ: $p(\theta\mid \mathrm{tốt})$ và $p(\theta\mid \mathrm{xấu})$ --- hiểu nôm na: ``ở đâu trong không gian $\theta$ thì thường ra kết quả tốt / xấu''.
+
+\textbf{(ii) Đề xuất $\theta$ mới sao cho có khả năng cải thiện.} Trial tiếp theo được lấy mẫu sao cho cân bằng giữa \emph{khai thác} (gần vùng đã thấy MAE thấp) và \emph{khám phá} (vùng chưa thử). Vòng lặp: thử $\to$ ghi MAE $\to$ cập nhật hai mật độ $\to$ đề xuất $\theta$ mới --- cho đến khi hết số trial hoặc hết ngân sách thời gian.
+
+Hình~\ref{fig:optuna-loop} tóm tắt vòng lặp; Hình~\ref{fig:optuna-1d} minh họa một chiều (ví dụ learning rate): các điểm thử ban đầu rải rộng, sau đó các trial mới dồn dần về khoảng có MAE tốt hơn.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+  box/.style={rectangle, rounded corners=2pt, draw=hdr, thick, align=center, font=\scriptsize, inner sep=5pt, minimum height=0.95cm},
+  arr/.style={-{Stealth[length=2mm]}, thick, hdr}
+]
+  \node[box, fill=blue!6] (s) {Không gian\\siêu tham số $\theta$};
+  \node[box, fill=yellow!15, right=1.0cm of s] (t) {Trial: chọn\\một bộ $\theta$};
+  \node[box, fill=green!10, right=1.0cm of t] (tr) {Huấn luyện\\+ đo MAE};
+  \node[box, fill=orange!12, below=1.05cm of tr] (sp) {Lưu kết quả\\vào study};
+  \node[box, fill=magenta!8, left=1.0cm of sp] (tp) {TPE: cập nhật\\$p(\theta\!\mid\!\text{tốt})$, $p(\theta\!\mid\!\text{xấu})$};
+  \node[box, fill=cyan!10, left=1.0cm of tp] (nx) {Đề xuất\\$\theta_{\mathrm{kế}}$};
+
+  \draw[arr] (s) -- (t);
+  \draw[arr] (t) -- (tr);
+  \draw[arr] (tr) -- (sp);
+  \draw[arr] (sp) -- (tp);
+  \draw[arr] (tp) -- (nx);
+  \draw[arr, dashed] (nx.north) |- ++(0.3,0.5) -| (t.north)
+    node[pos=0.25, above, font=\scriptsize] {lặp cho đến khi đủ trial};
+
+    \node[font=\scriptsize, align=left, anchor=west, right=0.8cm of tr] 
+    {
+    \textbf{Ghi chú:} ``tốt/xấu'' theo ngưỡng phân vị trong các trial hiện có;\\
+    Optuna có thể dùng sampler khác, nhưng TPE là mặc định phổ\\ biến cho không gian hỗn hợp (rời + liên tục).
+    };
+\end{tikzpicture}
+\caption{\textbf{Optuna + TPE (vòng lặp):} mỗi trial là một điểm $\theta$; MAE quan sát được dùng để học vùng tham số hứa hẹn và chọn trial tiếp theo thông minh hơn random.}
+\label{fig:optuna-loop}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.92]
+  % Trục 1D: một thành phần của theta (vd learning rate log-scale)
+  \draw[-{Stealth}, thick] (0,0) -- (10.2,0) node[right, font=\small] {một thành phần của $\theta$ (ví dụ $\log_{10}\eta$)};
+  % Vùng quan sát MAE tốt (minh họa)
+  \fill[green!18, opacity=0.85] (3.8,0) -- (3.8,0.55) -- (6.2,0.55) -- (6.2,0) -- cycle;
+  \node[font=\scriptsize, green!40!black] at (5,0.75) {vùng các trial sau cùng dồn về (MAE thấp)};
+
+  % Các trial: đầu rải rộng, sau tập trung
+  \foreach \x/\c in {0.8/red!70, 1.6/red!65, 2.4/red!60, 4.2/green!50!black, 4.9/green!50!black, 5.5/green!50!black, 6.0/green!50!black, 8.5/orange!80, 9.2/orange!75} {
+    \fill[\c] (\x,0) circle (2.8pt);
+  }
+  \node[font=\scriptsize, red!70!black] at (1.6,-0.55) {trial đầu: thử rộng};
+  \node[font=\scriptsize, green!50!black] at (5.2,-0.55) {trial sau: dồn vào vùng tốt};
+  \node[font=\scriptsize, orange!80!black, align=center] at (8.9,-0.55) {thỉnh thoảng vẫn\\khám phá xa};
+
+  \draw[decorate, decoration={brace, amplitude=4pt}, thick] (3.8,-1.05) -- (6.2,-1.05)
+    node[midway, below=6pt, font=\scriptsize] {TPE ước lượng vùng $\theta$ hay cho MAE nhỏ};
+\end{tikzpicture}
+\caption{\textbf{TPE trên một chiều (minh họa):} các điểm màu đỏ là trial sớm (khám phá); các điểm xanh gần vùng được học là tốt; điểm cam là \emph{exploration} để tránh kẹt cực trị cục bộ. Trên không gian đa chiều thật, TPE dùng cây Parzen thay cho ``vùng xanh'' phẳng này.}
+\label{fig:optuna-1d}
+\end{figure}
+
+Thuật toán Tree-structured Parzen Estimator (TPE) lặp các thử nghiệm; mỗi thử huấn luyện mô hình với một bộ siêu tham số rồi tối thiểu MAE trên tập kiểm chứng. Một study riêng cho GAT--LSTM báo cáo:
+\begin{itemize}[leftmargin=1.5em]
+  \item MAE tốt nhất trong study: \textbf{0.028168};
+  \item Bộ tham số: $\eta \approx 9{,}37\times 10^{-4}$, $\lambda_{\mathrm{wd}} \approx 4{,}09\times 10^{-6}$, $d_{\mathrm{g}}=128$, $d_{\mathrm{l}}=256$, số đầu $=1$, dropout $\approx 0{,}311$.
+\end{itemize}
+Con số 0.028168 và bảng so sánh mô hình (mục~\ref{sec:results}) thuộc các lần chạy khác nhau (khác hàm mục tiêu nội bộ hoặc khác tách train/val trong study); vì vậy chúng không được cộng hưởng thành một chỉ số duy nhất mà được trình bày song song để minh bạch.
+
+\subsection{Tách thời gian và walk-forward}
+Nguyên tắc: không xáo trộn các kỳ. \textbf{Walk-forward kiểu cửa sổ mở rộng (expanding window):} ở bước thứ $s$, tập huấn luyện gồm toàn bộ quan sát từ đầu chuỗi đến hết phân đoạn ngay trước khối kiểm tra; sau khi ghi nhận chỉ số trên khối kiểm tra hiện tại, khối đó được \emph{nối vào} phần huấn luyện cho bước $s{+}1$, còn khối kiểm tra trượt về phía tương lai một độ rộng cố định (một ``window'' theo trục thời gian). Như vậy mỗi lần lặp, phần huấn luyện dài thêm đúng một bước window so với bước trước (minh họa bốn bước đầu trên Hình~\ref{fig:split}). Trên pipeline đầy đủ có thể có nhiều bước hơn (ví dụ 9 cửa sổ); có thể lặp seed để ước lượng phương sai.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=0.88, every node/.style={font=\small}]
+  % Đơn vị ngang: trục thời gian chuẩn hóa [0,10]. Mỗi bước WF: train [0, 5+s], test [5+s, 6+s], s=1..4.
+  \definecolor{trainfill}{RGB}{200,220,245}
+  \definecolor{testfill}{RGB}{255,200,160}
+
+  % Chú giải
+  \fill[trainfill] (0,10.6) rectangle (1.1,11.15);
+  \node[anchor=west, font=\scriptsize] at (1.25,10.875) {Huấn luyện (mở rộng dần)};
+  \fill[testfill] (6.5,10.6) rectangle (7.6,11.15);
+  \node[anchor=west, font=\scriptsize] at (7.75,10.875) {Kiểm tra (một window)};
+
+  % 4 hàng: Bước 1 ở trên cùng → Bước 4 ở dưới (thứ tự bước tăng dần xuống)
+  \foreach \s/\yt in {1/8.2, 2/5.5, 3/2.8, 4/0.1} {
+    \pgfmathsetmacro{\tr}{5+\s}
+    \pgfmathtruncatemacro{\tend}{5+\s}
+    \pgfmathtruncatemacro{\tnext}{\tend+1}
+    \fill[trainfill] (0,\yt) rectangle (\tr,\yt+1.85);
+    \fill[testfill] (\tr,\yt) rectangle (\tr+1,\yt+1.85);
+    \draw[hdr, thick] (0,\yt) rectangle (10,\yt+1.85);
+    \draw[hdr, very thick] (\tr,\yt) -- (\tr,\yt+1.85);
+    \node[anchor=east, font=\scriptsize\bfseries] at (-0.35,\yt+0.92) {Bước \s};
+    \node[font=\scriptsize] at ({0.5*\tr},\yt+0.92) {train $[0,\tend)$};
+    \node[font=\scriptsize] at ({\tr+0.5},\yt+0.92) {test $[\tend,\tnext)$};
+  }
+
+  % Trục thời gian
+  \draw[-{Stealth[length=2.5mm]}, thick, hdr] (0,-0.85) -- (10.6,-0.85)
+    node[right, font=\small] {trục thời gian $\rightarrow$ (chỉ số kỳ / chuỗi cắt trượt)};
+  \foreach \x in {0,2,4,6,8,10} {
+    \draw[hdr] (\x,-0.75) -- (\x,-0.95);
+    \node[below, font=\scriptsize] at (\x,-0.95) {\x};
+  }
+
+  % Mũi tên ``thêm 1 window'' giữa hai hàng (minh họa)
+  \draw[dashed, gray!70, thick] (10.3,7.12) -- (10.3,6.05);
+  \node[right, font=\scriptsize, text=gray!60!black, align=left] at (10.45,6.58)
+    {\scriptsize mỗi bước:\\\scriptsize train dài thêm\\\scriptsize một window};
+\end{tikzpicture}
+\caption{\textbf{Walk-forward (cửa sổ mở rộng)} --- minh họa bốn bước liên tiếp theo chiều thời gian ngang. Ở Bước~1, huấn luyện trên đoạn đầu (đến mốc~6), kiểm tra ngay sau đó (một window). Ở Bước~2, phần vừa kiểm tra được gộp vào train nên train kéo dài đến mốc~7; khối kiểm tra trượt sang phải. Lặp lại: Bước~3 và~4. Trục số là \emph{thang chuẩn hóa} để dễ đọc; trên dữ liệu thật, một ``window'' tương ứng một bước test trong notebook (ví dụ 15 bước kiểm tra sau 210 mẫu train trong tách đơn giản).}
+\label{fig:split}
+\end{figure}
+
+%==============================================================================
+\section{Kết quả định lượng}
+\label{sec:results}
+
+\subsection{Bảng xếp hạng theo MAE khoảng}
+Các mô hình được huấn luyện trong cùng pipeline tensor, cùng độ đo $\mathrm{MAE}_{\mathrm{interval}}$. Số liệu dưới đây trích từ log thực nghiệm đã lưu (gom tuần, $W=12$, $N=26$, 274 chuỗi, tách như Hình~\ref{fig:split}).
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}l r r@{}}
+\toprule
+\textbf{Mô hình} & $\mathbf{MAE}_{\mathrm{interval}}$ & \textbf{Hạng} \\
+\midrule
+GAT--LSTM (bản tối ưu trong leaderboard) & 0.024024 & 1 \\
+GAT--LSTM + đồ thị động đầy đủ (cấu hình log) & 0.024280 & 2 \\
+LSTM & 0.024390 & 3 \\
+CNN--LSTM & 0.024540 & 4 \\
+GRU & 0.025370 & 5 \\
+GCN-only & 0.025610 & 6 \\
+\bottomrule
+\end{tabular}
+\caption{So sánh MAE khoảng (càng nhỏ càng tốt).}
+\label{tab:rank}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=12.5cm, height=6cm,
+  ybar, bar width=9pt,
+  ymin=0.023, ymax=0.027,
+  ylabel={$\mathrm{MAE}_{\mathrm{interval}}$},
+  symbolic x coords={GAT-LSTM,GAT-LSTM+Dyn,LSTM,CNN-LSTM,GRU,GCN},
+  xtick=data,
+  x tick label style={rotate=28, anchor=east, font=\small},
+  ymajorgrids=true,
+  grid style={gray!25},
+  nodes near coords,
+  every node near coord/.append style={font=\scriptsize, rotate=0},
+]
+\addplot[fill=blue!55] coordinates {(GAT-LSTM,0.024024) (GAT-LSTM+Dyn,0.024280) (LSTM,0.024390) (CNN-LSTM,0.024540) (GRU,0.025370) (GCN,0.025610)};
+\end{axis}
+\end{tikzpicture}
+\caption{Biểu đồ cột: MAE khoảng theo Bảng~\ref{tab:rank}.}
+\label{fig:bar}
+\end{figure}
+
+\subsection{Siêu tham số chi tiết từng mô hình}
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{@{}l L{7.2cm}@{}}
+\toprule
+\textbf{Mô hình} & \textbf{Siêu tham số (giá trị tốt trong log)} \\
+\midrule
+LSTM & $\mathrm{hidden\_dim}=128$, $\eta=0.00543$, dropout $=0.2$, số lớp LSTM $=2$ \\
+CNN--LSTM & $\mathrm{conv\_channels}=16$, $\mathrm{lstm\_hidden}=96$, kernel $=3$, $\eta=0.000408$, dropout $=0.3$ \\
+GRU & $\mathrm{hidden\_dim}=128$, $\eta=0.00029$, dropout $=0.2$, số lớp $=2$ \\
+GCN-only & hidden $=64$, $\eta=0.000353$, $\lambda_{\mathrm{wd}}=7.9\times 10^{-5}$, dropout $=0.3$ \\
+GAT--LSTM & $d_{\mathrm{g}}=128$, $d_{\mathrm{l}}=96$, đầu $=4$, $\eta \approx 3.9515\times 10^{-4}$, $\lambda_{\mathrm{wd}} \approx 5.5752\times 10^{-6}$, dropout $=0.2$ \\
+GAT--LSTM + dynamic & $d_{\mathrm{g}}=64$, $d_{\mathrm{l}}=96$, đầu $=1$, $\eta \approx 3.9878\times 10^{-4}$, $\lambda_{\mathrm{wd}} \approx 9.7201\times 10^{-6}$, dropout $=0.5$ \\
+\bottomrule
+\end{tabular}
+\caption{Chi tiết siêu tham số đi kèm từng dòng trong log benchmark.}
+\label{tab:hyper}
+\end{table}
+
+\subsection{Phân tích chênh lệch}
+\begin{itemize}[leftmargin=1.5em]
+  \item GAT--LSTM vượt LSTM: $\Delta = 0.024390 - 0.024024 = 0.000366$ (khoảng \textbf{1.5\%} tương đối so với giá trị LSTM nếu lấy tỷ lệ $\Delta/\mathrm{MAE}_{\mathrm{LSTM}}$).
+  \item GCN-only kém nhất: thiếu nhánh tuần tự LSTM rõ ràng trong kiến trúc đối chứng, phù hợp với giả thuyết rằng động thái theo thời gian trong cửa sổ $W$ là tín hiệu mạnh.
+  \item Biến thể GAT--LSTM với đồ thị động trong log cụ thể lại xấp xỉ hơn bản không ghi ``+Dyn'': điều này gợi ý \textbf{nhạy cảm với siêu tham số đồ thị} (mật độ cạnh, dropout cao 0.5) chứ không phải ``càng nhiều cạnh động càng tốt'' một cách tự động.
+\end{itemize}
+
+%==============================================================================
+\section{Thảo luận}
+
+Kết quả MAE chênh lệch nhỏ giữa các kiến trúc mạnh cho thấy \textbf{trần cải thiện} trong bài toán này có thể thấp: nhiễu thị trường chi phối phần lớn sai số. Muốn kết luận thống kê, nên báo cái khoảng tin cậy bootstrap theo cửa sổ hoặc theo mã. Về mặt đầu tư, MAE thấp không đồng nghĩa Sharpe sau phí tích cực: cần mô phỏng giao dịch có ma sát, hạn chế vị thế và trễ thực thi.
+
+Mô-đun đồ thị trong mã nguồn có nhập thư viện khai thác luật kết hợp (FPGrowth) nhưng nhánh động đang triển khai \textbf{KNN + ngưỡng}; đây là điểm cần thống nhất trong mọi ấn phẩm phái sinh từ cùng codebase.
+
+%==============================================================================
+\section{Kết luận}
+
+Chúng tôi đã trình bày đầy đủ một pipeline dự báo khoảng sinh lợi đa mã: đặc trưng bốn chiều chuẩn hóa có kiểm soát rò rỉ, đồ thị lai tĩnh--động, kiến trúc GAT--LSTM, hàm mất mát ba thành phần, và thủ tục huấn luyện có điều chế. Thực nghiệm số với 26 mã, tuần ISO, $W=12$, cho thấy GAT--LSTM đạt MAE khoảng \textbf{0.024024}, tốt nhất trong bảng so sánh đã nêu, nhưng chỉ hơn LSTM một lượng nhỏ về độ lớn tuyệt đối. Hướng tiếp theo: (i) kiểm định ý nghĩa thống kê và ổn định walk-forward đa cửa sổ; (ii) phân tích nhạy cảm với $\tau$, $K$, và metric tương đồng; (iii) liên kết với hiệu suất danh mục sau chi phí.
+
+%==============================================================================
+\section*{Lời cảm ơn}
+Dataset công khai trên nền tảng Kaggle và môi trường GPU từ xa hỗ trợ tái lập thực nghiệm.
+
+%==============================================================================
+\begin{thebibliography}{99}
+\bibitem{hochreiter1997long}
+S. Hochreiter và J. Schmidhuber, ``Long short-term memory,'' \emph{Neural computation}, 9(8), 1735--1780, 1997.
+
+\bibitem{velickovic2018graph}
+P. Veličković, G. Cucurull, A. Casanova, A. Romero, P. Liò, và Y. Bengio, ``Graph attention networks,'' \emph{ICLR}, 2018.
+
+\bibitem{hamilton2017inductive}
+W. L. Hamilton, R. Ying, và J. Leskovec, ``Inductive representation learning on large graphs,'' \emph{NeurIPS}, 2017.
+
+\bibitem{akiba2019optuna}
+T. Akiba, S. Sano, T. Yanase, T. Ohta, và M. Koyama, ``Optuna: A next-generation hyperparameter optimization framework,'' \emph{KDD}, 2019.
+
+\bibitem{fama1970efficient}
+E. F. Fama, ``Efficient capital markets: A review of theory and empirical work,'' \emph{Journal of Finance}, 25(2), 383--417, 1970.
+
+\bibitem{paszke2019pytorch}
+A. Paszke \emph{et al.}, ``PyTorch: An imperative style, high-performance deep learning library,'' \emph{NeurIPS}, 2019.
+
+\bibitem{fey2019fast}
+M. Fey và J. E. Lenssen, ``Fast graph representation learning with PyTorch Geometric,'' \emph{ICLR Workshop}, 2019.
+\end{thebibliography}
+
+\end{document}

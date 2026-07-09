@@ -1,0 +1,716 @@
+\documentclass[12pt,a4paper]{article}
+
+% ─── Packages ───────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{microtype}
+\usepackage{caption}
+\usepackage{float}
+
+% ─── Colors ──────────────────────────────────────────────────────────────────
+\definecolor{codeblue}{RGB}{0,83,156}
+\definecolor{codegray}{RGB}{245,245,245}
+\definecolor{codered}{RGB}{180,0,0}
+\definecolor{codegreen}{RGB}{0,120,60}
+\definecolor{headerblue}{RGB}{30,60,120}
+
+% ─── Hyperref ────────────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=headerblue,
+  urlcolor=codeblue,
+  citecolor=codered,
+  pdftitle={GAT-LSTM Stock Prediction Pipeline},
+  pdfauthor={Technical Report}
+}
+
+% ─── Listings (code blocks) ──────────────────────────────────────────────────
+\lstset{
+  backgroundcolor=\color{codegray},
+  basicstyle=\ttfamily\small,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  commentstyle=\color{codegreen},
+  keywordstyle=\color{codeblue}\bfseries,
+  stringstyle=\color{codered},
+  showstringspaces=false,
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{gray!40},
+  xleftmargin=1em,
+  xrightmargin=1em,
+  aboveskip=0.8em,
+  belowskip=0.8em,
+  numbers=none,
+}
+
+% ─── Section formatting ──────────────────────────────────────────────────────
+\titleformat{\section}
+  {\Large\bfseries\color{headerblue}}
+  {\thesection.}{0.6em}{}[\titlerule]
+
+\titleformat{\subsection}
+  {\large\bfseries\color{headerblue!80}}
+  {\thesubsection}{0.6em}{}
+
+\titleformat{\subsubsection}
+  {\normalsize\bfseries}
+  {\thesubsubsection}{0.6em}{}
+
+% ─── Header / Footer ─────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textcolor{gray}{GAT-LSTM Stock Prediction Pipeline}}
+\fancyhead[R]{\small\textcolor{gray}{Technical Report — March 2026}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ─── Table column types ──────────────────────────────────────────────────────
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+% ─── Custom commands ─────────────────────────────────────────────────────────
+\newcommand{\codeinline}[1]{\texttt{\small #1}}
+
+% ════════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+% ─── Title page ──────────────────────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{2cm}
+  {\Huge\bfseries\color{headerblue} GAT-LSTM Stock Prediction Pipeline\par}
+  \vspace{0.5cm}
+  \rule{\linewidth}{1.5pt}
+  \vspace{0.4cm}
+
+  {\large\itshape Technical Report\par}
+  \vspace{2cm}
+
+  \begin{tabular}{L{4cm} L{8cm}}
+    \textbf{Project}   & Vietnamese Stock Market Return-Interval Prediction \\[0.4em]
+    \textbf{Date}      & March 2026 \\[0.4em]
+    \textbf{Dataset}   & \codeinline{stock\_market\_19\_24.csv} — daily closing prices, 2019–2024 \\
+  \end{tabular}
+
+  \vfill
+  \includegraphics[width=0.18\textwidth]{example-image} % replace with actual logo if available
+  \vspace{0.5cm}
+
+  {\small\textcolor{gray}{Confidential — Internal Use Only}}
+\end{titlepage}
+
+% ─── Table of Contents ───────────────────────────────────────────────────────
+\tableofcontents
+\newpage
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Problem Formulation}
+
+\subsection{Task}
+Given a look-back window of $W$ time periods (weeks or quarters) of historical stock features, predict for the \textbf{next period} the \textbf{return interval} $[\hat{r}^{\min}_i,\ \hat{r}^{\max}_i]$ for every stock $i$ in the universe.
+
+\subsection{Output Definition}
+
+\begin{equation}
+  r^{\min}_i = \frac{P^{\min}_i - P^{\text{open}}_i}{P^{\text{open}}_i}, \qquad
+  r^{\max}_i = \frac{P^{\max}_i - P^{\text{open}}_i}{P^{\text{open}}_i}
+\end{equation}
+
+where $P^{\text{open}}$, $P^{\min}$, $P^{\max}$ are the opening, minimum and maximum closing prices within the period. The model outputs a vector of shape \codeinline{[num\_stocks, 2]} — one pair $(r^{\min},\ r^{\max})$ per stock.
+
+\subsection{Why Intervals?}
+Interval prediction is more informative than point prediction for risk management:
+\begin{itemize}[leftmargin=2em]
+  \item $r^{\min}$ upper-bounds the \textbf{downside risk} (drawdown).
+  \item $r^{\max}$ provides a bound on the \textbf{upside potential}.
+  \item The width $r^{\max} - r^{\min}$ estimates \textbf{intra-period volatility}.
+\end{itemize}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Data Pipeline}
+
+\subsection{Source}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3cm} L{9cm}}
+\toprule
+\textbf{Field} & \textbf{Detail} \\
+\midrule
+File      & \codeinline{stock\_market\_19\_24.csv} \\
+Frequency & Daily closing prices \\
+Coverage  & 2019–2024 ($\sim$5 years) \\
+Universe  & $\sim$26 Vietnamese stocks (VHM, NVL, PDR, NLG, \ldots) \\
+\bottomrule
+\end{tabular}
+\caption{Dataset summary}
+\end{table}
+
+\subsection{Loading \& Cleaning (\texttt{DataLoader})}
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Date parsing} — \codeinline{pd.to\_datetime} on the \codeinline{History Price / Date} column; rows sorted chronologically.
+  \item \textbf{Calendar derivation} — \codeinline{Quarter} (1–4) and \codeinline{Year} columns added; for weekly mode an ISO \codeinline{Week} and \codeinline{Year\_Week} string (e.g.\ \codeinline{2024\_W15}) are derived.
+  \item \textbf{Price cleaning} — comma-separated strings, \codeinline{\#DIV/0!}, empty strings and dashes are handled and coerced to \codeinline{float}; missing values are filled with \textbf{forward-fill then back-fill} (\codeinline{ffill().bfill()}), which preserves last-known-price semantics without look-ahead bias.
+\end{enumerate}
+
+\subsection{Aggregation Modes}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{2.5cm} L{2.5cm} C{2.5cm} C{3cm}}
+\toprule
+\textbf{Mode} & \textbf{Period} & \textbf{WINDOW\_SIZE} & \textbf{SPLIT\_IDX} \\
+\midrule
+\codeinline{quarterly} & 3 months  & 2 & $-4$ (last 4 quarters) \\
+\codeinline{weekly}    & 1 ISO week & 8 & $-4$ (last 4 weeks) \\
+\bottomrule
+\end{tabular}
+\caption{Aggregation modes and split indices}
+\end{table}
+
+\subsection{Train / Test Split}
+A \textbf{temporal split} is used — no shuffling:
+
+\begin{lstlisting}
+sequences[:-4]  -->  train
+sequences[-4:]  -->  test
+\end{lstlisting}
+
+This prevents leakage of future information into training.
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Feature Engineering}
+
+\textit{Module:} \codeinline{src/feature\_engineering.py} — class \codeinline{FeatureEngineer}\\
+All features are computed per \textbf{period $\times$ stock} before being stacked into a tensor.
+
+\subsection{Input Features (4 per stock per period)}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{C{0.5cm} L{3cm} L{5cm} L{4.5cm}}
+\toprule
+\textbf{\#} & \textbf{Feature} & \textbf{Formula} & \textbf{Rationale} \\
+\midrule
+1 & Log Volatility   & $\ln(1 + \text{std}(P))$ & Captures intra-period price dispersion; log dampens scale effects \\[0.4em]
+2 & Log Price Level  & $\ln(1 + \text{mean}(P))$ & Normalised price scale; log reduces heteroscedasticity \\[0.4em]
+3 & Log Return       & $\ln\!\left(\dfrac{P_{\text{end}}}{P_{\text{start}}}\right)$ & Direction and magnitude of price movement \\[0.6em]
+4 & Return Skewness  & $\text{skew}(\Delta P / P)$ & Asymmetry of the intra-period return distribution; captures tail risk \\
+\bottomrule
+\end{tabular}
+\caption{Input features per stock per period}
+\end{table}
+
+\subsection{Feature Normalisation}
+After stacking the four features into a \codeinline{(num\_stocks, 4)} matrix, a \codeinline{sklearn.preprocessing.StandardScaler} (zero-mean, unit-variance) is fitted \textbf{on the training set only} and applied to both train and test, then encoded as a \codeinline{torch.float32} tensor.
+
+\subsection{Tensor Shapes}
+
+\begin{lstlisting}
+X_full : [T, num_stocks, 4]   # T = total number of periods
+Y_full : [T, num_stocks, 2]   # 2 = (r_min, r_max)
+\end{lstlisting}
+
+Sequences of length $W$ are sliced with a sliding window:
+
+\begin{lstlisting}
+x_seq    = X_full[i : i+W]   --> shape [W, num_stocks, 4]
+y_target = Y_full[i+W]        --> shape [num_stocks, 2]
+\end{lstlisting}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Graph Construction}
+
+\textit{Module:} \codeinline{src/graph\_construction.py} — class \codeinline{GraphConstructor}\\
+At each time step the \textbf{graph} $\mathcal{G}_t = (\mathcal{V}, \mathcal{E}_t)$ is built dynamically. Nodes $\mathcal{V}$ are stocks; edges $\mathcal{E}_t$ encode pairwise similarity within the look-back window.
+
+\subsection{Static Graph (Sector-based)}
+An edge $(i, j)$ is added if stocks $i$ and $j$ belong to the \textbf{same non-Unknown sector}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3cm} L{10cm}}
+\toprule
+\textbf{Sector} & \textbf{Stocks} \\
+\midrule
+Housing      & VHM, NVL, PDR, NLG, KDH, DXG, VPI, NTL, DIG, TCH, CRE, CCL, HDC, ITC \\
+Industrial   & LHG, SZL, TIP, TIX, KBC \\
+Construction & TDC, HDG, CDC, D2D \\
+\bottomrule
+\end{tabular}
+\caption{Sector memberships for the static graph}
+\end{table}
+
+The static edge index is \textbf{undirected} and fixed throughout training.
+
+\subsection{Dynamic Graph (KNN Similarity)}
+
+\textbf{Algorithm:}
+\begin{enumerate}[leftmargin=2em]
+  \item Retrieve daily price series $\{x_i\}$ for all stocks within the current look-back window.
+  \item Compute pairwise similarity matrix $S \in \mathbb{R}^{N \times N}$.
+  \item For each stock $i$, take the \textbf{top-$K$} most similar stocks.
+  \item Add edge $(i, j)$ only if $S_{ij} \geq \tau$ (threshold).
+  \item Symmetrise with \codeinline{to\_undirected}, then deduplicate.
+\end{enumerate}
+
+\subsubsection{Similarity Metrics}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{2.5cm} L{5.5cm} L{5cm}}
+\toprule
+\textbf{Metric} & \textbf{Formula} & \textbf{Properties} \\
+\midrule
+Pearson & $\rho_{ij} = \dfrac{\text{Cov}(x_i,x_j)}{\sigma_i\,\sigma_j}$ & Mean-centred; captures linear co-movement; standard in finance \\[0.8em]
+Cosine \textit{(default)} & $\cos(x_i,x_j) = \dfrac{x_i \cdot x_j}{\|x_i\|\,\|x_j\|}$ & Direction-based; no mean-centering; more stable adjacency matrices for GNNs \\
+\bottomrule
+\end{tabular}
+\caption{Available similarity metrics}
+\end{table}
+
+Both metrics use their \textbf{absolute value} so positive and negative co-movements are treated symmetrically.
+Cosine uses a guard against zero-norm vectors:
+
+\begin{equation}
+  \hat{x}_i = \frac{x_i}{\max(\|x_i\|,\ \varepsilon)}, \quad \varepsilon = 10^{-8}
+\end{equation}
+
+\subsubsection{Threshold $\tau$}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{C{2.5cm} L{9cm}}
+\toprule
+\textbf{Setting} & \textbf{Effect} \\
+\midrule
+$\tau = 0.5$ & Dense graph; many spurious edges \\
+$\tau = 0.7$ \textit{(default)} & Balanced sparsity \\
+$\tau = 0.8$ & Sparser; only strong relationships \\
+$\tau = 0.9$ & Very sparse; potentially too few edges \\
+\bottomrule
+\end{tabular}
+\caption{Effect of threshold $\tau$ on graph density}
+\end{table}
+
+\subsection{Hybrid Graph}
+The \textbf{final edge index} used during training is the union of static and dynamic edges:
+
+\begin{equation}
+  \mathcal{E}_{\text{final}} = \mathcal{E}_{\text{static}} \cup \mathcal{E}_{\text{dynamic}}
+\end{equation}
+
+Duplicates are removed with \codeinline{torch.unique(..., dim=1)}.
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Model Architectures}
+
+\textit{Module:} \codeinline{src/model.py}\\
+Both models follow the same \textbf{GAT $\to$ LSTM $\to$ Linear} pipeline:
+
+\begin{lstlisting}
+Input [W, N, F]
+  |
+  v  (for each t = 1...W)
+GATConv(F -> H*heads)  --- ELU --->  [N, H*heads]
+  |
+  v
+Stack over time -> [W, N, H*heads]
+  |  permute -> [N, W, H*heads]
+  v
+LSTM(H*heads -> L)
+  |  take h_n (final hidden) -> [N, L]
+  v
+Linear(L -> 2)  ->  predictions [N, 2]
+\end{lstlisting}
+
+\subsection{\texttt{StockGAT\_LSTM} — Single-Layer GAT}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3.5cm} L{9cm}}
+\toprule
+\textbf{Component} & \textbf{Detail} \\
+\midrule
+GATConv (1 layer) & \codeinline{in\_features} $\to$ \codeinline{gnn\_hidden}, multi-head attention \\
+Activation        & ELU after GAT \\
+LSTM (1 layer)    & \codeinline{gnn\_hidden·heads} $\to$ \codeinline{lstm\_hidden}, dropout = 0.2 \\
+Linear head       & \codeinline{lstm\_hidden} $\to$ 2 \\
+GAT Dropout       & 0.6 (on attention coefficients) \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{StockGAT\_LSTM} architecture}
+\end{table}
+
+\subsection{\texttt{StockGAT\_LSTM\_Deep} — Two-Layer GAT}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3.5cm} L{9cm}}
+\toprule
+\textbf{Component} & \textbf{Detail} \\
+\midrule
+GATConv layer 1 & \codeinline{in\_features} $\to$ \codeinline{gnn\_hidden}, multi-head, \codeinline{concat=True} \\
+GATConv layer 2 & \codeinline{gnn\_hidden·heads} $\to$ \codeinline{gnn\_hidden}, \codeinline{concat=False} (averages heads) \\
+Activation      & ELU after each GAT layer \\
+LSTM (1 layer)  & \codeinline{gnn\_hidden} $\to$ \codeinline{lstm\_hidden} \\
+Linear head     & \codeinline{lstm\_hidden} $\to$ 2 \\
+GAT Dropout     & 0.1 (lower; depth already regularises) \\
+\bottomrule
+\end{tabular}
+\caption{\texttt{StockGAT\_LSTM\_Deep} architecture}
+\end{table}
+
+\subsection{Graph Attention (GAT) — Mechanism}
+
+At layer $l$, the attention coefficient between node $i$ and neighbour $j$ is:
+
+\begin{equation}
+  \alpha_{ij} = \frac{
+    \exp\!\left(\text{LeakyReLU}\!\left(\mathbf{a}^\top \left[\mathbf{W}\mathbf{h}_i \,\|\, \mathbf{W}\mathbf{h}_j\right]\right)\right)
+  }{
+    \sum_{k \in \mathcal{N}(i)} \exp\!\left(\text{LeakyReLU}\!\left(\mathbf{a}^\top \left[\mathbf{W}\mathbf{h}_i \,\|\, \mathbf{W}\mathbf{h}_k\right]\right)\right)
+  }
+\end{equation}
+
+The new node embedding is:
+
+\begin{equation}
+  \mathbf{h}^{(l+1)}_i = \text{ELU}\!\left(\sum_{j \in \mathcal{N}(i)} \alpha_{ij}\, \mathbf{W}\mathbf{h}^{(l)}_j\right)
+\end{equation}
+
+With $K$ heads the outputs are \textbf{concatenated} (layer 1) or \textbf{averaged} (layer 2):
+
+\begin{equation}
+  \mathbf{h}^{(l+1)}_i = \Big\|_{k=1}^{K}\ \text{ELU}\!\left(\sum_{j \in \mathcal{N}(i)} \alpha^k_{ij}\, \mathbf{W}^k \mathbf{h}^{(l)}_j\right)
+\end{equation}
+
+\subsection{LSTM — Temporal Modelling}
+
+The spatial embeddings from GAT (one per time step) are fed as a sequence into an LSTM:
+
+\begin{equation}
+  (h_t, c_t) = \text{LSTM}(z_t,\ h_{t-1},\ c_{t-1})
+\end{equation}
+
+where $z_t \in \mathbb{R}^{H \cdot \text{heads}}$ is the GAT output at step $t$. Only the \textbf{final hidden state} $h_W$ is used for prediction, capturing long-range dependencies.
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Loss Functions}
+
+\textit{Module:} \codeinline{src/trainer.py}
+
+\subsection{\texttt{CorrelationLoss} (default, \texttt{loss\_fn='correlation'})}
+
+Combines three terms:
+
+\begin{equation}
+  \mathcal{L} = w_{\text{mse}} \cdot \mathcal{L}_{\text{MSE}} + w_{\text{corr}} \cdot \mathcal{L}_{\text{corr}} + w_{\text{pen}} \cdot \mathcal{L}_{\text{risk}}
+\end{equation}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{2cm} L{6cm} L{5cm}}
+\toprule
+\textbf{Term} & \textbf{Formula} & \textbf{Purpose} \\
+\midrule
+$\mathcal{L}_{\text{MSE}}$ &
+  $\frac{1}{2N}\sum_i \!\left[(r^{\min}_i - \hat{r}^{\min}_i)^2 + (r^{\max}_i - \hat{r}^{\max}_i)^2\right]$ &
+  Penalise absolute magnitude errors \\[0.5em]
+$\mathcal{L}_{\text{corr}}$ &
+  $1 - \rho(\hat{r}^{\min}, r^{\min})$, where $\rho$ = Pearson &
+  Penalise wrong direction/trend across stocks \\[0.5em]
+$\mathcal{L}_{\text{risk}}$ &
+  $\frac{1}{N}\sum_i \max(0,\, \hat{r}^{\min}_i - r^{\min}_i)$ &
+  Safety: never overestimate the minimum \\
+\bottomrule
+\end{tabular}
+\caption{Components of \texttt{CorrelationLoss}}
+\end{table}
+
+Default weights: $w_{\text{mse}} = 0.45$, $w_{\text{corr}} = 0.45$, $w_{\text{pen}} = 0.10$.
+
+\begin{quote}
+\textbf{Why correlation loss?} MSE alone can be minimised by predicting the dataset mean, which captures magnitude but produces flat predictions with zero trend accuracy. The correlation term forces the model to rank stocks correctly relative to each other — a much more useful property for portfolio decisions.
+\end{quote}
+
+\subsection{\texttt{CustomLoss} (alternative)}
+
+\begin{equation}
+  \mathcal{L} = \mathcal{L}_{\text{Huber}}(\bar{r}, \hat{\bar{r}})
+  + \alpha \cdot \left[\text{L1}(\Delta r, \widehat{\Delta r})
+  + \frac{1}{N}\sum_i \max(0, -\widehat{\Delta r}_i)\right]
+\end{equation}
+
+where $\bar{r} = \frac{r^{\min}+r^{\max}}{2}$ (centre) and $\Delta r = r^{\max} - r^{\min}$ (width).
+\begin{itemize}[leftmargin=2em]
+  \item HuberLoss ($\delta = 1$) for the \textbf{centre} — robust to outliers.
+  \item L1 for the \textbf{range width} — promotes correct interval size.
+  \item Range penalty discourages \textbf{inverted intervals} ($\hat{r}^{\max} < \hat{r}^{\min}$).
+\end{itemize}
+
+\subsection{\texttt{nn.HuberLoss} (simple baseline)}
+Standard Huber loss applied directly to both outputs.
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Training Procedure}
+
+\textit{Module:} \codeinline{src/trainer.py} — class \codeinline{Trainer}
+
+\subsection{Optimiser}
+\textbf{Adam} with learning rate $\eta = 0.001$ and weight decay (L2 regularisation) $\lambda = 10^{-5}$.
+
+\subsection{Learning-Rate Scheduler}
+\textbf{CosineAnnealingLR} — smoothly anneals $\eta$ from its initial value to 0 over \codeinline{T\_max = NUM\_EPOCHS} steps:
+
+\begin{equation}
+  \eta_t = \eta_{\min} + \frac{1}{2}(\eta_{\max} - \eta_{\min})\left(1 + \cos\!\frac{\pi t}{T_{\max}}\right)
+\end{equation}
+
+\subsection{LR Warm-up}
+For the first \codeinline{warmup\_epochs = 5} steps the learning rate is linearly ramped:
+
+\begin{equation}
+  \eta_t = \eta_{\max} \cdot \frac{t+1}{W_{\text{warmup}}}
+\end{equation}
+
+This prevents large gradient updates from damaging random initial weights.
+
+\subsection{Gradient Clipping}
+After each backward pass:
+
+\begin{lstlisting}[language=Python]
+torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+\end{lstlisting}
+
+Prevents exploding gradients, especially important for LSTMs.
+
+\subsection{Early Stopping}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{4cm} C{4cm}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Patience        & 30 epochs \\
+Min delta ($\min\_\delta$) & $10^{-4}$ \\
+\bottomrule
+\end{tabular}
+\caption{Early stopping configuration}
+\end{table}
+
+If loss does not improve by at least $\min\_\delta$ for 30 consecutive epochs, training halts and the \textbf{best model state} (lowest validation loss) is restored.
+
+\subsection{Mixed Precision Training}
+When a CUDA GPU is available, \codeinline{torch.cuda.amp.GradScaler} is used for FP16 mixed-precision training — reducing memory usage and accelerating matrix operations on Tensor Core GPUs.
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Evaluation Metrics}
+
+\textit{Module:} \codeinline{src/evaluation.py} — class \codeinline{Evaluator}\\
+Evaluation is done in inference mode (\codeinline{model.eval()}, \codeinline{torch.no\_grad()}).
+
+\subsection{Primary Metrics}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3cm} L{5.5cm} C{1.5cm} L{3.5cm}}
+\toprule
+\textbf{Metric} & \textbf{Formula} & \textbf{Unit} & \textbf{Interpretation} \\
+\midrule
+MAE\_min &
+  $\frac{1}{T \cdot N}\sum_{t,i}|\hat{r}^{\min}_{t,i} - r^{\min}_{t,i}|$ &
+  ret. & Avg.\ absolute error on downside bound \\[0.4em]
+MAE\_max &
+  $\frac{1}{T \cdot N}\sum_{t,i}|\hat{r}^{\max}_{t,i} - r^{\max}_{t,i}|$ &
+  ret. & Avg.\ absolute error on upside bound \\[0.4em]
+MAE\_interval &
+  $\frac{1}{2}(\text{MAE}_{\min} + \text{MAE}_{\max})$ &
+  ret. & Overall interval accuracy \textit{(primary KPI)} \\[0.4em]
+MSE\_min &
+  $\frac{1}{T \cdot N}\sum_{t,i}(\hat{r}^{\min}_{t,i} - r^{\min}_{t,i})^2$ &
+  — & Squared error on downside \\[0.4em]
+MSE\_max &
+  $\frac{1}{T \cdot N}\sum_{t,i}(\hat{r}^{\max}_{t,i} - r^{\max}_{t,i})^2$ &
+  — & Squared error on upside \\[0.4em]
+MSE\_interval &
+  $\frac{1}{2}(\text{MSE}_{\min} + \text{MSE}_{\max})$ &
+  — & Overall squared error \\
+\bottomrule
+\end{tabular}
+\caption{Primary evaluation metrics}
+\end{table}
+
+All metrics are \textbf{averaged first over stocks} within a test step, then \textbf{averaged over test steps} — so each time period has equal weight regardless of the number of stocks.
+
+\subsection{Range Compression Analysis}
+Post-hoc diagnostic comparing predicted vs.\ true interval widths:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{3cm} L{7cm}}
+\toprule
+\textbf{Statistic} & \textbf{Formula} \\
+\midrule
+Range Ratio & $\frac{1}{T}\sum_t \dfrac{\widehat{\Delta r}_t}{\Delta r_t + \varepsilon}$ \\[0.8em]
+Range Bias  & $\frac{1}{T}\sum_t (\widehat{\Delta r}_t - \Delta r_t)$ \\
+\bottomrule
+\end{tabular}
+\caption{Range compression diagnostics}
+\end{table}
+
+A ratio $\ll 1$ indicates \textbf{interval collapse} — a known failure mode of MSE-trained models that predict near-constant outputs.
+
+\subsection{Visualisation Outputs}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{4.5cm} L{8.5cm}}
+\toprule
+\textbf{Plot} & \textbf{Content} \\
+\midrule
+\codeinline{predictions\_\{i\}.png} & Pred vs.\ true $r^{\min}$, $r^{\max}$ for each stock (groups of 3) \\
+\codeinline{range\_analysis.png}    & Range over time + distribution comparison \\
+\codeinline{training\_loss.png}     & Training loss curve across epochs \\
+\bottomrule
+\end{tabular}
+\caption{Generated visualisation outputs}
+\end{table}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Reproducibility}
+
+\textit{Module:} \codeinline{src/utils.py} — function \codeinline{set\_seed(seed=42)}\\
+Called as the \textbf{very first statement} in \codeinline{main()} before any data loading or tensor operations.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{4.5cm} L{8.5cm}}
+\toprule
+\textbf{Layer locked} & \textbf{Mechanism} \\
+\midrule
+Python \codeinline{random}    & \codeinline{random.seed(seed)} \\
+NumPy                         & \codeinline{np.random.seed(seed)} \\
+PyTorch CPU                   & \codeinline{torch.manual\_seed(seed)} \\
+PyTorch CUDA (all GPUs)       & \codeinline{torch.cuda.manual\_seed\_all(seed)} \\
+CuDNN                         & \codeinline{deterministic=True}, \codeinline{benchmark=False} \\
+Deterministic PyTorch ops     & \codeinline{torch.use\_deterministic\_algorithms(True, warn\_only=False)} \\
+CUDA workspace (cuBLAS)       & \codeinline{CUBLAS\_WORKSPACE\_CONFIG=:4096:8} \\
+\bottomrule
+\end{tabular}
+\caption{Reproducibility mechanisms}
+\end{table}
+
+\begin{quote}
+\textbf{Note:} \codeinline{warn\_only=False} makes training \textbf{fail loudly} if any non-deterministic kernel is invoked, rather than silently producing different results — this ensures that if two runs with the same seed diverge, the cause is immediately visible.
+\end{quote}
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Experiment Tracking}
+
+\textit{Module:} \codeinline{src/experiment\_logger.py} — class \codeinline{ExperimentLogger}
+
+\subsection{Log Directory Structure}
+
+\begin{lstlisting}
+logs/
++-- {experiment_name}/
+    |-- config.json          <- all hyperparameters
+    |-- training_log.csv     <- loss per epoch (+ breakdown every 10 epochs)
+    |-- metrics.json         <- final test metrics
+    |-- summary.txt          <- human-readable summary
+    +-- checkpoints/
+        +-- checkpoint_epoch_{N}.pt
+\end{lstlisting}
+
+\subsection{Experiment Naming Convention}
+
+\begin{lstlisting}
+{agg}_{model}_{arch}_w{W}_k{K}_{loss}_{hidden}_{sim}_{tau}_e{E}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{L{2cm} L{5cm} L{4cm}}
+\toprule
+\textbf{Token} & \textbf{Meaning} & \textbf{Example} \\
+\midrule
+\codeinline{agg}   & Aggregation mode         & \codeinline{w} (weekly) / \codeinline{q} (quarterly) \\
+\codeinline{model} & Architecture             & \codeinline{gat\_single} / \codeinline{gat\_deep} \\
+\codeinline{arch}  & Always \codeinline{gat}  & — \\
+\codeinline{W}     & Window size              & \codeinline{w8} \\
+\codeinline{K}     & Top-K neighbours         & \codeinline{k5} \\
+\codeinline{loss}  & MSE/Corr weights         & \codeinline{mse45\_corr45} \\
+\codeinline{hidden}& GNN/LSTM dims            & \codeinline{h128\_256} \\
+\codeinline{sim}   & Similarity metric        & \codeinline{cos} / \codeinline{per} \\
+\codeinline{tau}   & Threshold $\times 10$    & \codeinline{t7} ($\tau=0.7$) \\
+\codeinline{E}     & Epochs                   & \codeinline{e30} \\
+\bottomrule
+\end{tabular}
+\caption{Experiment name tokens}
+\end{table}
+
+\textbf{Example full name:} \codeinline{w\_gat\_deep\_w8\_k5\_mse45\_corr45\_h128\_256\_cost7\_e30}
+
+\subsection{\texttt{compare\_experiments.py}}
+Scans all sub-directories of \codeinline{logs/} and aggregates all config keys (including \codeinline{similarity\_metric}, \codeinline{corr\_threshold}, \codeinline{random\_seed}) and all test metrics from \codeinline{metrics.json} into a single side-by-side comparison report.
+
+% ════════════════════════════════════════════════════════════════════════════
+\section{Hyperparameter Reference}
+
+\begin{longtable}{L{4cm} L{3.5cm} C{2.5cm} L{3cm}}
+\toprule
+\textbf{Parameter} & \textbf{Variable} & \textbf{Current} & \textbf{Tuning range} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Parameter} & \textbf{Variable} & \textbf{Current} & \textbf{Tuning range} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Random seed         & \codeinline{RANDOM\_SEED}        & 42           & Fixed \\
+Aggregation mode    & \codeinline{AGGREGATION\_MODE}   & weekly       & quarterly / weekly \\
+Look-back window    & \codeinline{WINDOW\_SIZE}        & 8 (weeks)    & 4, 8, 12 \\
+KNN neighbours      & \codeinline{TOP\_K}              & 5            & 3–10 \\
+Similarity metric   & \codeinline{SIMILARITY\_METRIC}  & cosine       & pearson / cosine \\
+Threshold $\tau$    & \codeinline{CORR\_THRESHOLD}     & 0.7          & 0.7, 0.8, 0.9 \\
+MSE loss weight     & \codeinline{weight\_mse}         & 0.45         & 0.3–0.6 \\
+Correlation weight  & \codeinline{weight\_corr}        & 0.45         & 0.3–0.6 \\
+Risk penalty weight & \codeinline{weight\_penalty}     & 0.10         & 0.05–0.2 \\
+Model type          & \codeinline{MODEL\_TYPE}         & deep         & single / deep \\
+GAT hidden dim      & \codeinline{GNN\_HIDDEN}         & 128          & 64, 128, 256 \\
+LSTM hidden dim     & \codeinline{LSTM\_HIDDEN}        & 256          & 128, 256, 512 \\
+Attention heads     & \codeinline{NUM\_HEADS}          & 2            & 1, 2, 4 \\
+Dropout             & \codeinline{DROPOUT}             & 0.6          & 0.3–0.6 \\
+Learning rate       & \codeinline{LEARNING\_RATE}      & 0.001        & $10^{-4}$–$10^{-2}$ \\
+L2 regularisation   & \codeinline{WEIGHT\_DECAY}       & $10^{-5}$    & $10^{-6}$–$10^{-4}$ \\
+Epochs              & \codeinline{NUM\_EPOCHS}         & 30           & 30–200 \\
+Early stopping      & (\textit{trainer})               & 30 epochs    & 20–50 \\
+LR warm-up          & (\textit{trainer})               & 5 epochs     & 0–10 \\
+\end{longtable}
+
+% ─── End ─────────────────────────────────────────────────────────────────────
+\vspace{2em}
+\noindent\rule{\linewidth}{0.4pt}
+\begin{center}
+  \textit{End of report.}
+\end{center}
+
+\end{document}

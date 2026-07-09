@@ -1,0 +1,12 @@
+{
+  "output_dir": "logs/tuned_baseline4_static_gat_lstm",
+  "runs": [
+    {
+      "name": "baseline4_static_gat_lstm",
+      "config": "configs/tune_baseline4_static_gat_lstm.json",
+      "models": {
+        "GAT-LSTM": "logs/optuna_gat_lstm_20260428_202044_w4/best_params.json"
+      }
+    }
+  ]
+}

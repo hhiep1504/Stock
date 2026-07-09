@@ -1,0 +1,89 @@
+{
+  "experiment_name": "retune_baseline4_static_gcn_lstm",
+  "paths": {
+    "project_root": ".",
+    "dataset_dir": "dataset",
+    "outputs_dir": "outputs",
+    "logs_dir": "logs/retune_baseline4_static_gcn_lstm",
+    "configs_dir": "configs"
+  },
+  "data": {
+    "daily_file": "dataset/stock_market_19_24.csv",
+    "target_file": "dataset/min_max_return.csv",
+    "aggregation_mode": "weekly",
+    "feature_set": "baseline4",
+    "window_size": 8,
+    "split_idx": -4
+  },
+  "graph": {
+    "graph_mode": "static",
+    "top_k": 3,
+    "use_arm": false,
+    "use_static_graph": true,
+    "similarity_metric": "pearson",
+    "corr_threshold": 0.7
+  },
+  "model": {
+    "model_type": "deep",
+    "in_features": 4,
+    "gnn_hidden": 128,
+    "lstm_hidden": 256,
+    "num_layers": 1,
+    "heads": 2,
+    "dropout": 0.6,
+    "share_graph_lstm_backbone": false,
+    "shared_graph_lstm_hidden": 128,
+    "shared_graph_lstm_layers": 1,
+    "gat_add_self_loops": true,
+    "gcn_add_self_loops": true,
+    "gcn_normalize": true
+  },
+  "loss": {
+    "name": "mse"
+  },
+  "training": {
+    "epochs": 30,
+    "batch_size": 32,
+    "learning_rate": 0.001,
+    "weight_decay": 0.00001,
+    "print_every": 1,
+    "early_stopping_patience": 10,
+    "warmup_epochs": 5,
+    "min_delta": 0.0001,
+    "use_scheduler": true
+  },
+  "runtime": {
+    "random_seed": 42,
+    "device": "auto",
+    "save_checkpoint": false,
+    "save_plots": false,
+    "show_plots": false
+  },
+  "benchmark": {
+    "output_dir": "logs/retune_baseline4_static_gcn_lstm",
+    "protocol": "walk_forward",
+    "seeds": [42, 52, 62],
+    "gnn_epochs": 80,
+    "baseline_epochs": 80,
+    "device": "auto",
+    "n_folds": 5,
+    "n_runs": 3,
+    "include_statistical_models": false,
+    "validation_split": 0.1,
+    "early_stopping_patience": 8,
+    "min_train_size": 150,
+    "test_step": 15
+  },
+  "optuna": {
+    "n_trials": 100,
+    "direction": "minimize",
+    "metric": "mae_interval",
+    "study_name": "baseline4_static_gcn_lstm_optuna",
+    "storage_url": null,
+    "persist_study": true,
+    "resume_study": true,
+    "sampler_seed": 42,
+    "max_epochs_per_trial": 10,
+    "prune_after_epochs": 5
+  }
+}

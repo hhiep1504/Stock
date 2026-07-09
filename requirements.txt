@@ -1,0 +1,14 @@
+matplotlib>=3.8
+mlflow>=2.12
+mlxtend>=0.23
+networkx>=3.3
+numpy>=1.26
+pandas>=2.2
+optuna>=3.6
+scikit-learn>=1.5
+scipy>=1.13
+seaborn>=0.13
+statsmodels>=0.14
+torch>=2.2
+torch-geometric>=2.5
+tqdm>=4.66

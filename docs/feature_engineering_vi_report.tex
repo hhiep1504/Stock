@@ -1,0 +1,411 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{fontspec}
+\setmainfont{Times New Roman}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{setspace}
+\onehalfspacing
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{microtype}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\definecolor{mainblue}{RGB}{22,58,112}
+\definecolor{subblue}{RGB}{44,92,150}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=mainblue,
+  urlcolor=subblue,
+  pdftitle={Kỹ thuật đặc trưng và mô hình hóa không-thời gian cho dự báo min-max return},
+  pdfauthor={Báo cáo kỹ thuật}
+}
+
+\titleformat{\section}
+  {\Large\bfseries\color{mainblue}}
+  {\thesection.}{0.6em}{}
+
+\titleformat{\subsection}
+  {\large\bfseries\color{subblue}}
+  {\thesubsection}{0.6em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Báo cáo kỹ thuật}
+\fancyhead[R]{\small Min-Max Return Forecasting}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\setlength{\headheight}{14pt}
+
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{2cm}
+{\Huge\bfseries\color{mainblue}Kỹ Thuật Đặc Trưng và Mô Hình Hóa Không-Thời Gian\\[0.4em]
+Cho Dự Báo Min-Max Return Cổ Phiếu\par}
+\vspace{0.9cm}
+{\Large Bản tiếng Việt có dấu\par}
+\vspace{1.8cm}
+\begin{tabular}{L{4cm}L{9cm}}
+\textbf{Chủ đề:} & Dự báo biên độ sinh lợi cực trị (min-max) từ chuỗi giá đóng cửa đơn biến \\
+\textbf{Mô hình:} & LSTM, GRU, CNN-LSTM, GNN-LSTM, GAT-LSTM \\
+\textbf{Ràng buộc dữ liệu:} & Chỉ dùng giá đóng cửa theo ngày, không dùng biến ngoại sinh \\
+\textbf{Ngày biên soạn:} & 23/04/2026 \\
+\end{tabular}
+\vfill
+{\small Tài liệu được dịch và biên tập lại để dễ đọc, giữ đúng tinh thần nội dung kỹ thuật gốc.}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Giới thiệu bài toán dự báo min-max return}
+Dự báo thị trường chứng khoán là một trong những bài toán khó nhất của tài chính định lượng vì dữ liệu chuỗi thời gian tài chính vừa nhiễu, vừa chịu tác động bởi các cú sốc vĩ mô, lại vừa \textit{không dừng} (non-stationary). Điều này có nghĩa là các đặc tính thống kê như trung bình và phương sai thay đổi theo thời gian, khiến việc học trực tiếp từ giá thô thường thiếu ổn định.
+
+Các mô hình truyền thống như ARIMA và GARCH từng đóng vai trò nền tảng, nhưng bị giới hạn bởi giả định tuyến tính và cấu trúc phân phối phần dư. Các kiến trúc học sâu như LSTM, GRU, CNN-LSTM giúp bắt phụ thuộc phi tuyến theo thời gian tốt hơn. Xa hơn, Graph Neural Network (GNN), đặc biệt là GAT-LSTM, cho phép học đồng thời hai chiều: động học thời gian của từng mã và quan hệ không gian giữa các mã trên toàn thị trường.
+
+Báo cáo này tập trung vào bối cảnh ràng buộc mạnh: \textbf{chỉ có giá đóng cửa mỗi ngày}. Không có dữ liệu cơ bản doanh nghiệp, không có tin tức cảm xúc, không có dữ liệu intraday đầy đủ, không có khối lượng giao dịch. Vì vậy, toàn bộ sức mạnh dự báo phải đến từ \textbf{feature engineering} và thiết kế kiến trúc mô hình.
+
+\section{Xây dựng biến mục tiêu: min-max log return}
+\subsection{Log return cơ bản}
+Với cổ phiếu $i$ tại thời điểm $t$, log return được định nghĩa:
+\begin{equation}
+r_i(t)=\ln\left(\frac{p_i(t)}{p_i(t-1)}\right)
+\end{equation}
+trong đó $p_i(t)$ là giá đóng cửa của cổ phiếu $i$ tại thời điểm $t$.
+
+Log return được ưu tiên vì có tính cộng dồn theo thời gian và thường ổn định hơn khi huấn luyện mô hình học sâu.
+
+\subsection{Mục tiêu min-max trên chân trời dự báo $H$}
+Với cửa sổ dự báo độ dài $H$ phiên:
+\begin{equation}
+R_{\max}^{t+H}=\max_{1\le k\le H}\left(\ln\frac{p(t+k)}{p(t)}\right)
+\end{equation}
+\begin{equation}
+R_{\min}^{t+H}=\min_{1\le k\le H}\left(\ln\frac{p(t+k)}{p(t)}\right)
+\end{equation}
+
+Mô hình cần dự báo bộ đôi $\left(R_{\min}^{t+H},R_{\max}^{t+H}\right)$ để bao biên rủi ro giảm sâu và tiềm năng tăng tối đa trong kỳ kế tiếp.
+
+\subsection{Tính chất phân phối của biến cực trị}
+Trong thực tế, biến động cực trị của thị trường thường có đuôi dày (fat tails), độ nhọn cao (leptokurtic) và độ lệch (skewness) thay đổi theo giai đoạn. Vì biến mục tiêu nằm ở vùng đuôi phân phối, mô hình cần các đặc trưng đủ nhạy để nhận diện dấu hiệu tích tụ rủi ro trước khi xuất hiện breakout.
+
+\section{Feature engineering từ chuỗi giá đóng cửa đơn biến}
+\subsection{Biến đổi stationarity và chuẩn hóa}
+Giá đóng cửa thô thường không phù hợp để đưa trực tiếp vào mạng học sâu. Cần dùng sai phân hoặc log return để giảm lệ thuộc vào thang đo tuyệt đối, sau đó chuẩn hóa dữ liệu.
+
+Một công thức chuẩn hóa thường dùng:
+\begin{equation}
+x_{norm}=\frac{x-x_{\min}}{x_{\max}-x_{\min}}
+\end{equation}
+Trong đó $x_{\min}$ và $x_{\max}$ phải được tính từ quá khứ để tránh rò rỉ thông tin tương lai.
+
+\subsection{Nhóm đặc trưng động lượng và xu hướng}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{SMA/EMA}: làm mượt nhiễu cao tần, bóc tách xu hướng nền.
+  \item \textbf{MACD}: chênh lệch EMA ngắn hạn và dài hạn, phản ánh gia tốc xu hướng.
+  \item \textbf{RSI}: dao động trong dải 0--100, đo trạng thái quá mua/quá bán.
+  \item \textbf{ROC}: tốc độ thay đổi phần trăm theo số kỳ nhìn lại.
+\end{itemize}
+
+RSI được tính từ biến thiên giá:
+\begin{equation}
+\Delta P_t=P_t-P_{t-1}
+\end{equation}
+\begin{equation}
+RS=\frac{\text{Average Gain}}{\text{Average Loss}},\qquad RSI=100-\frac{100}{1+RS}
+\end{equation}
+
+\subsection{Nhóm đặc trưng biến động}
+\textbf{Bollinger Bands} được xây dựng từ trung bình động và độ lệch chuẩn cuộn:
+\begin{equation}
+Upper=SMA_N+k\sigma,\qquad Lower=SMA_N-k\sigma
+\end{equation}
+Độ rộng dải ($Upper-Lower$) là thước đo trực tiếp cho mức nén/giãn biến động.
+
+\subsection{Nhóm đặc trưng độ phức tạp: Hurst và Entropy}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Hurst exponent} $H$:
+  \begin{itemize}[leftmargin=1.5em]
+    \item $H>0.5$: thị trường có tính xu hướng (persistent).
+    \item $H=0.5$: gần random walk.
+    \item $H<0.5$: có xu hướng hồi quy trung bình (mean-reverting).
+  \end{itemize}
+  \item \textbf{Sample Entropy / Approximate Entropy}: đo mức độ phức tạp và nhiễu nội tại của hệ thống.
+\end{itemize}
+
+\subsection{Ví dụ giải thích feature bằng dữ liệu thật (mã DIG)}
+Để phần đặc trưng không chỉ mang tính lý thuyết, dưới đây là ví dụ tính trực tiếp từ dữ liệu của bạn trong \texttt{dataset/stock\_market\_19\_24.csv}, giai đoạn 28/06/2019 đến 05/07/2019.
+
+\subsubsection*{A. Feature map: dữ liệu vào $\rightarrow$ công thức $\rightarrow$ ý nghĩa}
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{L{2.7cm}L{3.4cm}L{4.2cm}L{4.0cm}}
+\toprule
+\textbf{Feature} & \textbf{Input từ dữ liệu} & \textbf{Công thức} & \textbf{Ý nghĩa trong dự báo min-max} \\
+\midrule
+Log return ngày & Cột DIG theo 2 ngày liên tiếp & $r_t=\ln\left(\frac{P_t}{P_{t-1}}\right)$ & Đo xung lực tăng/giảm tức thời, làm đầu vào ổn định hơn giá thô. \\
+SMA/EMA & Chuỗi DIG theo cửa sổ $N$ & $SMA_N=\frac{1}{N}\sum P_t$,\ $EMA_t=\alpha P_t+(1-\alpha)EMA_{t-1}$ & Tách xu hướng nền (SMA) và phản ứng nhanh với thay đổi mới (EMA). \\
+ROC & Giá đầu/cuối cửa sổ & $ROC_N=\frac{P_{end}-P_{start}}{P_{start}}$ & Đo tốc độ thay đổi ròng trong cửa sổ, phản ánh gia tốc xu hướng. \\
+Bollinger & SMA và độ lệch chuẩn cuộn & $Upper=SMA_N+2\sigma$,\ $Lower=SMA_N-2\sigma$ & Đo mức nén/giãn biến động; band co hẹp thường đi trước breakout. \\
+RSI & Chuỗi biến thiên $\Delta P_t$ & $RSI=100-\frac{100}{1+RS}$ & Phát hiện quá mua/quá bán, hỗ trợ nhận diện ranh giới cực trị. \\
+Min/Max target & Giá gốc + giá cực trị tương lai & $R_{min/max}=\ln\left(\frac{P_{min/max}}{P_{base}}\right)$ & Nhãn mục tiêu trực tiếp cho bài toán dự báo biên rủi ro/tiềm năng. \\
+\bottomrule
+\end{tabular}
+\caption{Bản đồ “dữ liệu vào $\rightarrow$ feature $\rightarrow$ ý nghĩa” trên dữ liệu thật.}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{L{3.2cm}C{3cm}C{3cm}}
+\toprule
+\textbf{Ngày} & \textbf{DIG (Close)} & \textbf{VHM (Close)} \\
+\midrule
+2019-06-28 & 7,080 & 57,932 \\
+2019-07-01 & 7,002 & 59,174 \\
+2019-07-02 & 6,897 & 59,247 \\
+2019-07-03 & 6,818 & 59,905 \\
+2019-07-04 & 6,975 & 62,096 \\
+2019-07-05 & 6,923 & 62,827 \\
+\bottomrule
+\end{tabular}
+\caption{Dữ liệu giá thực tế dùng để minh họa feature.}
+\end{table}
+
+\textbf{(1) Tính target min-max tuần cho DIG (horizon 5 phiên):}
+\begin{itemize}[leftmargin=1.5em]
+  \item Giá gốc: $P_{base}=7080$ (ngày 28/06/2019).
+  \item Giá thấp nhất tuần sau: $P_{min}=6818$.
+  \item Giá cao nhất tuần sau: $P_{max}=7002$.
+\end{itemize}
+
+Từ đó:
+\begin{equation}
+R_{min}^{log}=\ln\left(\frac{6818}{7080}\right)\approx -0.037708,
+\qquad
+R_{max}^{log}=\ln\left(\frac{7002}{7080}\right)\approx -0.011078
+\end{equation}
+\begin{equation}
+R_{min}^{simple}=\frac{6818-7080}{7080}\approx -0.037006,
+\qquad
+R_{max}^{simple}=\frac{7002-7080}{7080}\approx -0.011017
+\end{equation}
+
+\textbf{(2) Tính nhóm feature kỹ thuật trên 5 phiên 01/07--05/07 cho DIG:}
+\begin{itemize}[leftmargin=1.5em]
+  \item $SMA_5 \approx 6923.000$
+  \item Độ lệch chuẩn mẫu $\sigma_5 \approx 71.844$
+  \item $EMA_5 \approx 6932.037$ (dùng hệ số $\alpha=\frac{2}{5+1}$)
+  \item $ROC_5 = \frac{6923-7002}{7002} \approx -0.011282$
+\end{itemize}
+
+\textbf{(3) Bollinger Bands với $N=5, k=2$:}
+\begin{equation}
+Upper = SMA_5 + 2\sigma_5 \approx 7066.687,
+\qquad
+Lower = SMA_5 - 2\sigma_5 \approx 6779.313
+\end{equation}
+\begin{equation}
+Bandwidth = Upper-Lower \approx 287.374
+\end{equation}
+
+\subsubsection*{B. Trace table theo từng ngày (minh họa cách feature được dựng lên)}
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{L{2.4cm}C{1.8cm}C{1.5cm}C{1.2cm}C{1.2cm}C{2cm}}
+\toprule
+\textbf{Ngày} & \textbf{Close} & $\Delta P$ & Gain & Loss & $EMA_5$ \\
+\midrule
+2019-07-01 & 7002 & -- & -- & -- & 7002.000 \\
+2019-07-02 & 6897 & -105 & 0 & 105 & 6967.000 \\
+2019-07-03 & 6818 & -79 & 0 & 79 & 6917.333 \\
+2019-07-04 & 6975 & 157 & 157 & 0 & 6936.556 \\
+2019-07-05 & 6923 & -52 & 0 & 52 & 6932.037 \\
+\bottomrule
+\end{tabular}
+\caption{Bảng truy vết trung gian để tính RSI/EMA từ dữ liệu DIG thật.}
+\end{table}
+
+Từ bảng truy vết: trung bình Gain $\approx 39.25$, trung bình Loss $\approx 59.00$, suy ra $RS\approx0.6653$ và:
+\begin{equation}
+RSI \approx 100-\frac{100}{1+0.6653}\approx 39.949
+\end{equation}
+Giá trị RSI này cho thấy trạng thái nghiêng về yếu/điều chỉnh trong cửa sổ ngắn hạn, phù hợp với thực tế là DIG giảm mạnh đầu tuần rồi chỉ hồi một phần.
+
+\textbf{(5) Liên hệ file nhãn quý:}
+Trong \texttt{dataset/min\_max\_return.csv}, với DIG ở quý 3/2019, giá trị \textit{Min Return} khoảng $-0.07037$ và \textit{Max Return} khoảng $0.13167$. Đây là minh chứng rằng khi kéo horizon từ tuần lên quý, biên dao động mở rộng đáng kể; do đó feature về biến động (std, Bollinger, entropy) trở nên đặc biệt quan trọng.
+
+\subsubsection*{C. Pitfalls thường gặp khi tạo feature (và cách tránh)}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Leakage khi chuẩn hóa}: nếu dùng cả tập train+test để tính min/max hoặc mean/std thì mô hình “nhìn thấy tương lai”. Cần fit scaler chỉ trên dữ liệu quá khứ của tập huấn luyện.
+  \item \textbf{Sai kiểu dữ liệu CSV}: giá dạng chuỗi có dấu phẩy (ví dụ \texttt{"7,080"}) phải được chuyển sang số trước khi tính toán.
+  \item \textbf{Giá trị lỗi như \texttt{\#DIV/0!}}: nếu không làm sạch sẽ phá hỏng pipeline (đặc biệt với RSI/ROC và loss function).
+  \item \textbf{Warm-up window}: EMA/RSI ở các điểm đầu cửa sổ phụ thuộc giá trị khởi tạo, cần quy ước rõ để so sánh giữa các mô hình công bằng.
+  \item \textbf{Nhầm horizon của nhãn}: min-max tuần và min-max quý có biên dao động rất khác nhau; phải thống nhất horizon giữa feature window và target window.
+\end{itemize}
+
+\subsubsection*{D. Biểu đồ trực quan cho feature (dữ liệu DIG thật)}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.95\linewidth,
+  height=6.2cm,
+  xlabel={Phiên trong tuần (01/07 -- 05/07)},
+  ylabel={Giá},
+  xmin=1, xmax=5,
+  xtick={1,2,3,4,5},
+  xticklabels={T2,T3,T4,T5,T6},
+  ymajorgrids=true,
+  grid style=dashed,
+  legend style={at={(0.5,-0.23)}, anchor=north, legend columns=3, draw=none},
+  tick label style={font=\small},
+  label style={font=\small}
+]
+\addplot[very thick, color=mainblue, mark=*] coordinates {(1,7002) (2,6897) (3,6818) (4,6975) (5,6923)};
+\addlegendentry{Close DIG}
+
+\addplot[thick, color=orange!90!black, mark=square*] coordinates {(1,7002.000) (2,6967.000) (3,6917.333) (4,6936.556) (5,6932.037)};
+\addlegendentry{EMA5}
+
+\addplot[thick, color=green!50!black, dashed] coordinates {(1,6923) (2,6923) (3,6923) (4,6923) (5,6923)};
+\addlegendentry{SMA5}
+
+\addplot[thick, color=red!70!black, dotted] coordinates {(1,7066.687) (2,7066.687) (3,7066.687) (4,7066.687) (5,7066.687)};
+\addlegendentry{Upper Bollinger}
+
+\addplot[thick, color=purple!70!black, dotted] coordinates {(1,6779.313) (2,6779.313) (3,6779.313) (4,6779.313) (5,6779.313)};
+\addlegendentry{Lower Bollinger}
+\end{axis}
+\end{tikzpicture}
+\caption{Giá DIG theo ngày và các feature xu hướng/biến động: EMA5, SMA5, Bollinger Bands.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar,
+  bar width=10pt,
+  width=0.95\linewidth,
+  height=5.8cm,
+  xlabel={Phiên},
+  ylabel={Biến thiên giá},
+  symbolic x coords={07-02,07-03,07-04,07-05},
+  xtick=data,
+  ymajorgrids=true,
+  grid style=dashed,
+  legend style={at={(0.5,-0.22)}, anchor=north, legend columns=3, draw=none},
+  tick label style={font=\small},
+  label style={font=\small}
+]
+\addplot[fill=mainblue!70] coordinates {(07-02,-105) (07-03,-79) (07-04,157) (07-05,-52)};
+\addlegendentry{$\Delta P$}
+
+\addplot[fill=green!60!black] coordinates {(07-02,0) (07-03,0) (07-04,157) (07-05,0)};
+\addlegendentry{Gain}
+
+\addplot[fill=red!70!black] coordinates {(07-02,105) (07-03,79) (07-04,0) (07-05,52)};
+\addlegendentry{Loss}
+\end{axis}
+\end{tikzpicture}
+\caption{Chuỗi trung gian để tính RSI: biến thiên ngày ($\Delta P$), Gain và Loss của DIG.}
+\end{figure}
+
+Hai biểu đồ trên giúp nhìn ngay được logic feature: đường EMA phản ứng nhanh hơn SMA với nhịp giảm/tăng ngắn hạn; dải Bollinger cho thấy mức giãn biến động; và biểu đồ cột Gain/Loss diễn giải trực tiếp đầu vào của RSI.
+
+\FloatBarrier
+
+\section{Mô hình theo chiều thời gian}
+\subsection{LSTM}
+LSTM giải quyết vấn đề triệt tiêu gradient của RNN thông thường nhờ cell state và ba cổng chính:
+\begin{itemize}[leftmargin=1.5em]
+  \item Forget gate: loại bỏ thông tin cũ không còn giá trị.
+  \item Input gate: nạp thông tin mới.
+  \item Output gate: chọn tín hiệu đầu ra phục vụ dự báo.
+\end{itemize}
+
+\subsection{GRU}
+GRU là biến thể gọn hơn LSTM, ít tham số hơn, huấn luyện nhanh hơn, và thường bền hơn trong môi trường dữ liệu nhiễu cao.
+
+\subsection{CNN-LSTM}
+CNN-LSTM kết hợp tích chập 1D để nhận diện mẫu cục bộ giữa các đặc trưng, sau đó dùng LSTM để học phụ thuộc tuần tự dài hơn. Cấu trúc này phù hợp khi tín hiệu có dạng tổ hợp nhiều chỉ báo xảy ra đồng thời.
+
+\section{Xây dựng đồ thị khi không có dữ liệu ngoại sinh}
+\subsection{Đồ thị từ giá đóng cửa}
+Khi chỉ có giá đóng cửa, ma trận kề không thể dựa vào dữ liệu quan hệ doanh nghiệp bên ngoài. Cần suy ra liên kết trực tiếp từ hình dạng chuỗi giá.
+
+\subsection{Dynamic Time Warping (DTW)}
+Pearson correlation khó bắt hiện tượng trễ pha. DTW cho phép căn chỉnh phi tuyến hai chuỗi lệch nhịp, từ đó đo tương đồng cấu trúc thực tế tốt hơn.
+
+Với cửa sổ lịch sử trượt $\delta$:
+\begin{equation}
+\text{cost}(x_i^t,x_j^t)=DTW\left(x_i^{t-\delta:t},x_j^{t-\delta:t}\right)
+\end{equation}
+Khoảng cách DTW thấp $\Rightarrow$ độ tương đồng cao. Ma trận kề $A_t$ có thể được tạo từ nghịch đảo khoảng cách kết hợp ngưỡng thưa.
+
+\subsection{Quan hệ lead-lag có hướng}
+Thông tin thị trường lan truyền không đồng thời. Mã vốn hóa lớn và thanh khoản cao thường phản ứng sớm hơn. Do đó, đồ thị có hướng giúp mô hình học được dòng ảnh hưởng dẫn-dắt giữa các tài sản.
+
+\section{Kiến trúc không-thời gian: GNN-LSTM và GAT-LSTM}
+\subsection{GNN-LSTM}
+GCN tổng hợp thông tin từ các láng giềng theo đồ thị để tạo embedding giàu ngữ cảnh không gian; sau đó LSTM học diễn biến embedding theo thời gian.
+
+Hạn chế của GCN cơ bản là trọng số ảnh hưởng láng giềng còn khá cứng và chưa phản ứng linh hoạt theo từng trạng thái thị trường.
+
+\subsection{GAT-LSTM}
+GAT đưa cơ chế self-attention vào lớp đồ thị:
+\begin{equation}
+e_{ij}=a\left(W\vec{h}_i, W\vec{h}_j\right)
+\end{equation}
+Các hệ số chú ý được chuẩn hóa để xác định láng giềng nào quan trọng hơn tại thời điểm hiện tại. Multi-head attention cho phép mô hình hóa song song nhiều kiểu quan hệ (ví dụ: đầu chú ý cho biến động, đầu chú ý cho động lượng).
+
+\subsection{Các mở rộng hiện đại: STGAT và FSTGAT}
+Các kiến trúc mới thường kết hợp thêm:
+\begin{itemize}[leftmargin=1.5em]
+  \item STL decomposition để tách trend/seasonality/residual.
+  \item Gated causal convolution trước khối graph attention.
+\end{itemize}
+Cơ chế nhân quả giúp giảm rủi ro look-ahead bias trong đánh giá mô hình tài chính.
+
+\section{Chiến lược huấn luyện, hàm mất mát và đánh giá}
+\subsection{Độ dài lookback window}
+Cửa sổ quá dài dễ kéo theo nhiễu cũ; quá ngắn thì thiếu ngữ cảnh chu kỳ. Thực nghiệm thường cho thấy điểm cân bằng ở vùng trung gian (ví dụ khoảng 20 phiên) tùy thị trường và tập dữ liệu.
+
+\subsection{Hàm mất mát cho bài toán cực trị}
+Với bài toán min-max return, bỏ lỡ sự kiện đuôi dày thường nguy hiểm hơn sai số nhỏ ở vùng bình thường. Vì vậy, hàm mất mát có trọng số theo độ lớn return thực tế là lựa chọn hợp lý để ưu tiên học các sự kiện biên.
+
+\subsection{Bộ chỉ số đánh giá}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Thống kê}: RMSE, MAE, MAPE.
+  \item \textbf{Phân loại hướng}: Accuracy, MCC.
+  \item \textbf{Hiệu quả đầu tư}: Sharpe ratio năm hóa, Maximum Drawdown, Cumulative Return.
+\end{itemize}
+
+\section{Kết luận}
+Trong bối cảnh chỉ có giá đóng cửa, chất lượng dự báo min-max return phụ thuộc quyết định vào hai yếu tố:
+\begin{itemize}[leftmargin=1.5em]
+  \item Feature engineering đủ giàu để biểu diễn động lượng, biến động, và độ phức tạp hệ thống.
+  \item Kiến trúc không-thời gian đủ mạnh để học đồng thời quan hệ liên tài sản và phụ thuộc theo thời gian.
+\end{itemize}
+
+GAT-LSTM và các biến thể nâng cao như FSTGAT là hướng tiếp cận rất tiềm năng cho bài toán dự báo cực trị trong thị trường phi dừng và biến động cao.
+
+\end{document}

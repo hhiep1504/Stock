@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets and local environment files
+.env
+*.env
+!*.env.example
+
+# Generated experiment artifacts
+logs/
+outputs/
+mlruns/
+*.db
+*.sqlite
+*.sqlite3
+*.pt
+*.pth
+*.ckpt
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.toc
+*.fls
+*.fdb_latexmk
+
+# Market data policy for the public repository:
+# keep the compact default sample; keep larger or derived datasets local.
+dataset/*
+!dataset/
+!dataset/README.md
+!dataset/stock_market_19_24.csv
+!dataset/min_max_return.csv
+!dataset/data_dict.md
+!dataset/history_price.md
+!dataset/min_max_return.md
+
+# Keep curated figures used by README/docs
+!docs/figures/
+!docs/figures/*.png

@@ -1,0 +1,24 @@
+{
+  "output_dir": "logs/tuned_baseline4_benchmark",
+  "runs": [
+    {
+      "name": "baseline4_hybrid_models",
+      "config": "configs/feature_benchmark_baseline4.json",
+      "models": {
+        "LSTM": "logs/retune_baseline4/optuna_lstm_20260525_062733/best_params.json",
+        "GRU": "logs/retune_baseline4/optuna_gru_20260525_063800/best_params.json",
+        "CNN-LSTM": "logs/retune_baseline4/optuna_cnn_lstm_20260525_064759/best_params.json",
+        "Temporal GCN": "logs/retune_baseline4/optuna_temporal_gcn_20260525_065712/best_params.json",
+        "GCN-LSTM": "logs/retune_baseline4/optuna_gcn_lstm_20260527_061357/best_params.json",
+        "GAT-LSTM": "logs/retune_baseline4/optuna_gat_lstm_20260525_073835/best_params.json"
+      }
+    },
+    {
+      "name": "baseline4_static_gcn_lstm",
+      "config": "configs/tune_baseline4_static_gcn_lstm.json",
+      "models": {
+        "GCN-LSTM": "logs/retune_baseline4_static_gcn_lstm/optuna_gcn_lstm_20260527_195824/best_params.json"
+      }
+    }
+  ]
+}
