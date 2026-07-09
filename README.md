@@ -32,10 +32,15 @@ MAE across repeated walk-forward runs. Lower is better.
 | 7 | Temporal GCN | hybrid | 0.025437 | 27 |
 | 8 | GCN-LSTM | hybrid | 0.026975 | 27 |
 
-The interval view below is the style used to inspect forecast behaviour: the
-actual min-max return band is plotted against a walk-forward forecast band.
+The interval views below inspect forecast behaviour for three selected stocks.
+Each chart compares the actual min-max return band with a calibrated CNN-LSTM
+forecast band over the final four displayed holdout weeks.
 
-![Actual vs forecast return interval](docs/figures/interval_forecast_band.svg)
+![NVL calibrated CNN-LSTM return interval forecast](docs/figures/cnn_lstm_intervals/NVL.svg)
+
+![TCH calibrated CNN-LSTM return interval forecast](docs/figures/cnn_lstm_intervals/TCH.svg)
+
+![NBB calibrated CNN-LSTM return interval forecast](docs/figures/cnn_lstm_intervals/NBB.svg)
 
 ## Repository Layout
 
@@ -127,10 +132,10 @@ Windows users can run the feature-window sweep with:
 .\scripts\run_feature_window_sweep_3090.ps1 -Quick
 ```
 
-Regenerate the README interval figure:
+Regenerate the README interval figures:
 
 ```bash
-python scripts/plot_interval_forecast_figure.py --ticker DXG --weeks 44 --forecast-window 8
+python scripts/generate_cnn_lstm_interval_figures.py --epochs 80 --holdout-weeks 8 --display-weeks 4 --calibration history
 ```
 
 ## Notes

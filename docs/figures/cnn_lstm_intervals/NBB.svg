@@ -59,5 +59,4 @@
 <text class="legend" x="522" y="571">Pred min</text>
 <line x1="632" y1="566" x2="674" y2="566" stroke="#10b981" stroke-width="3"/>
 <text class="legend" x="684" y="571">Pred max</text>
-<text class="note" x="1140" y="571" text-anchor="end">epochs=80, dataset/stock_market_19_24.csv</text>
 </svg>

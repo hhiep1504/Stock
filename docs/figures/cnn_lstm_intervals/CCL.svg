@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="610" viewBox="0 0 1180 610" role="img">
+<title>CNN-LSTM Interval Forecast - CCL</title>
+<desc>Last 4 weeks | history-calibrated baseline4 CNN-LSTM | MAE interval 2.32 pp</desc>
+<rect width="1180" height="610" fill="#fbfbf8"/>
+<style>text{font-family:Inter,Segoe UI,Arial,sans-serif}.title{font-size:28px;font-weight:760;fill:#111827}.sub{font-size:15px;fill:#4b5563}.axis{font-size:12px;fill:#6b7280}.legend{font-size:14px;fill:#374151}.note{font-size:12px;fill:#6b7280}.metric{font-size:13px;fill:#374151;font-weight:650}</style>
+<text class="title" x="84" y="42">CNN-LSTM Interval Forecast - CCL</text>
+<text class="sub" x="84" y="67">Last 4 weeks | history-calibrated baseline4 CNN-LSTM | MAE interval 2.32 pp</text>
+<line x1="84" y1="522.00" x2="1140" y2="522.00" stroke="#e5e7eb" stroke-width="1"/>
+<text class="axis" x="70" y="526.00" text-anchor="end">-6.9%</text>
+<line x1="84" y1="437.20" x2="1140" y2="437.20" stroke="#e5e7eb" stroke-width="1"/>
+<text class="axis" x="70" y="441.20" text-anchor="end">-3.5%</text>
+<line x1="84" y1="352.40" x2="1140" y2="352.40" stroke="#e5e7eb" stroke-width="1"/>
+<text class="axis" x="70" y="356.40" text-anchor="end">-0.2%</text>
+<line x1="84" y1="267.60" x2="1140" y2="267.60" stroke="#e5e7eb" stroke-width="1"/>
+<text class="axis" x="70" y="271.60" text-anchor="end">3.2%</text>
+<line x1="84" y1="182.80" x2="1140" y2="182.80" stroke="#e5e7eb" stroke-width="1"/>
+<text class="axis" x="70" y="186.80" text-anchor="end">6.6%</text>
+<line x1="84" y1="98.00" x2="1140" y2="98.00" stroke="#e5e7eb" stroke-width="1"/>
+<text class="axis" x="70" y="102.00" text-anchor="end">10.0%</text>
+<line x1="84" y1="98" x2="84" y2="522" stroke="#9ca3af" stroke-width="1"/>
+<line x1="84" y1="522" x2="1140" y2="522" stroke="#9ca3af" stroke-width="1"/>
+<line x1="84" y1="348.54" x2="1140" y2="348.54" stroke="#374151" stroke-width="1.2" stroke-dasharray="4 6" opacity="0.55"/>
+<line x1="84.00" y1="522" x2="84.00" y2="528" stroke="#9ca3af"/>
+<text class="axis" x="84.00" y="548" text-anchor="middle">Dec 13</text>
+<line x1="436.00" y1="522" x2="436.00" y2="528" stroke="#9ca3af"/>
+<text class="axis" x="436.00" y="548" text-anchor="middle">Dec 20</text>
+<line x1="788.00" y1="522" x2="788.00" y2="528" stroke="#9ca3af"/>
+<text class="axis" x="788.00" y="548" text-anchor="middle">Dec 27</text>
+<line x1="1140.00" y1="522" x2="1140.00" y2="528" stroke="#9ca3af"/>
+<text class="axis" x="1140.00" y="548" text-anchor="middle">Dec 31</text>
+<polygon points="84.00,242.30 436.00,304.05 788.00,348.54 1140.00,320.46 1140.00,348.54 788.00,470.61 436.00,351.32 84.00,348.54" fill="#64748b" opacity="0.18"/>
+<polygon points="84.00,149.39 436.00,245.50 788.00,273.48 1140.00,324.63 1140.00,453.59 788.00,424.08 436.00,399.93 84.00,381.64" fill="#14b8a6" opacity="0.25"/>
+<path d="M 84.00 348.54 L 436.00 351.32 L 788.00 470.61 L 1140.00 348.54" fill="none" stroke="#111827" stroke-width="2.9"/>
+<path d="M 84.00 242.30 L 436.00 304.05 L 788.00 348.54 L 1140.00 320.46" fill="none" stroke="#64748b" stroke-width="2.9"/>
+<path d="M 84.00 381.64 L 436.00 399.93 L 788.00 424.08 L 1140.00 453.59" fill="none" stroke="#0f766e" stroke-width="3.2" stroke-dasharray="7 6"/>
+<path d="M 84.00 149.39 L 436.00 245.50 L 788.00 273.48 L 1140.00 324.63" fill="none" stroke="#10b981" stroke-width="3.2"/>
+<circle cx="84.00" cy="348.54" r="3.2" fill="#111827"/>
+<circle cx="436.00" cy="351.32" r="3.2" fill="#111827"/>
+<circle cx="788.00" cy="470.61" r="3.2" fill="#111827"/>
+<circle cx="1140.00" cy="348.54" r="3.2" fill="#111827"/>
+<circle cx="84.00" cy="242.30" r="3.2" fill="#64748b"/>
+<circle cx="436.00" cy="304.05" r="3.2" fill="#64748b"/>
+<circle cx="788.00" cy="348.54" r="3.2" fill="#64748b"/>
+<circle cx="1140.00" cy="320.46" r="3.2" fill="#64748b"/>
+<circle cx="84.00" cy="381.64" r="3.2" fill="#0f766e"/>
+<circle cx="436.00" cy="399.93" r="3.2" fill="#0f766e"/>
+<circle cx="788.00" cy="424.08" r="3.2" fill="#0f766e"/>
+<circle cx="1140.00" cy="453.59" r="3.2" fill="#0f766e"/>
+<circle cx="84.00" cy="149.39" r="3.2" fill="#10b981"/>
+<circle cx="436.00" cy="245.50" r="3.2" fill="#10b981"/>
+<circle cx="788.00" cy="273.48" r="3.2" fill="#10b981"/>
+<circle cx="1140.00" cy="324.63" r="3.2" fill="#10b981"/>
+<text class="metric" x="1140" y="84" text-anchor="end">Actual avg range 3.03% | Direction match 75%</text>
+<rect x="84" y="561" width="18" height="12" fill="#64748b" opacity="0.22"/>
+<text class="legend" x="110" y="571">Actual interval</text>
+<rect x="254" y="561" width="18" height="12" fill="#14b8a6" opacity="0.30"/>
+<text class="legend" x="280" y="571">Forecast interval</text>
+<line x1="470" y1="566" x2="512" y2="566" stroke="#0f766e" stroke-width="3" stroke-dasharray="7 6"/>
+<text class="legend" x="522" y="571">Pred min</text>
+<line x1="632" y1="566" x2="674" y2="566" stroke="#10b981" stroke-width="3"/>
+<text class="legend" x="684" y="571">Pred max</text>
+<text class="note" x="1140" y="571" text-anchor="end">epochs=80, dataset/stock_market_19_24.csv</text>
+</svg>

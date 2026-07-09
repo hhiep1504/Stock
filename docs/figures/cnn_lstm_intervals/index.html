@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CNN-LSTM interval forecast contact sheet</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f7f7f2;
+      color: #111827;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+    }
+    header {
+      padding: 28px 32px 18px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #fbfbf8;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      line-height: 1.2;
+    }
+    p {
+      margin: 0;
+      color: #4b5563;
+      font-size: 14px;
+    }
+    main {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+      gap: 18px;
+      padding: 24px;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .meta {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      color: #374151;
+      font-size: 13px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .meta span {
+      color: #6b7280;
+    }
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CNN-LSTM interval forecast contact sheet</h1>
+    <p>Ranked by visual score from the displayed holdout window. Forecast: history-calibrated baseline4 CNN-LSTM. Training epochs: 80. Displayed weeks: 4. Pick the 3 cleanest SVGs for README.</p>
+  </header>
+  <main>
+    <article class="card">
+<div class="meta"><strong>#1 NLG</strong><span>MAE 0.77 pp</span><span>score 3.75</span></div>
+<img src="NLG.svg" alt="NLG CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#2 NVL</strong><span>MAE 1.02 pp</span><span>score 3.31</span></div>
+<img src="NVL.svg" alt="NVL CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#3 VPI</strong><span>MAE 1.10 pp</span><span>score 3.13</span></div>
+<img src="VPI.svg" alt="VPI CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#4 TCH</strong><span>MAE 1.00 pp</span><span>score 3.11</span></div>
+<img src="TCH.svg" alt="TCH CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#5 NBB</strong><span>MAE 2.07 pp</span><span>score 3.00</span></div>
+<img src="NBB.svg" alt="NBB CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#6 LHG</strong><span>MAE 0.85 pp</span><span>score 2.99</span></div>
+<img src="LHG.svg" alt="LHG CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#7 PDR</strong><span>MAE 1.33 pp</span><span>score 2.80</span></div>
+<img src="PDR.svg" alt="PDR CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#8 CDC</strong><span>MAE 0.46 pp</span><span>score 2.75</span></div>
+<img src="CDC.svg" alt="CDC CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#9 CRE</strong><span>MAE 2.38 pp</span><span>score 2.64</span></div>
+<img src="CRE.svg" alt="CRE CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#10 TDC</strong><span>MAE 0.55 pp</span><span>score 2.55</span></div>
+<img src="TDC.svg" alt="TDC CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#11 HPX</strong><span>MAE 2.14 pp</span><span>score 2.44</span></div>
+<img src="HPX.svg" alt="HPX CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#12 VHM</strong><span>MAE 0.86 pp</span><span>score 2.39</span></div>
+<img src="VHM.svg" alt="VHM CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#13 ITC</strong><span>MAE 1.81 pp</span><span>score 2.19</span></div>
+<img src="ITC.svg" alt="ITC CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#14 KBC</strong><span>MAE 1.30 pp</span><span>score 2.12</span></div>
+<img src="KBC.svg" alt="KBC CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#15 TIX</strong><span>MAE 2.59 pp</span><span>score 2.06</span></div>
+<img src="TIX.svg" alt="TIX CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#16 DIG</strong><span>MAE 1.82 pp</span><span>score 2.05</span></div>
+<img src="DIG.svg" alt="DIG CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#17 NTL</strong><span>MAE 2.55 pp</span><span>score 1.97</span></div>
+<img src="NTL.svg" alt="NTL CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#18 IJC</strong><span>MAE 1.15 pp</span><span>score 1.95</span></div>
+<img src="IJC.svg" alt="IJC CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#19 CCL</strong><span>MAE 2.32 pp</span><span>score 1.95</span></div>
+<img src="CCL.svg" alt="CCL CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#20 D2D</strong><span>MAE 1.23 pp</span><span>score 1.86</span></div>
+<img src="D2D.svg" alt="D2D CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#21 TIP</strong><span>MAE 0.82 pp</span><span>score 1.74</span></div>
+<img src="TIP.svg" alt="TIP CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#22 HDC</strong><span>MAE 1.74 pp</span><span>score 1.74</span></div>
+<img src="HDC.svg" alt="HDC CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#23 HDG</strong><span>MAE 2.36 pp</span><span>score 1.73</span></div>
+<img src="HDG.svg" alt="HDG CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#24 SZL</strong><span>MAE 1.81 pp</span><span>score 1.58</span></div>
+<img src="SZL.svg" alt="SZL CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#25 DXG</strong><span>MAE 3.38 pp</span><span>score 1.57</span></div>
+<img src="DXG.svg" alt="DXG CNN-LSTM interval forecast">
+</article><article class="card">
+<div class="meta"><strong>#26 KDH</strong><span>MAE 1.33 pp</span><span>score 1.28</span></div>
+<img src="KDH.svg" alt="KDH CNN-LSTM interval forecast">
+</article>
+  </main>
+</body>
+</html>
