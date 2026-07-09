@@ -1,9 +1,10 @@
-# GAT-LSTM Stock Return Forecasting
+# Spatial-Temporal Stock Return Benchmark
 
-Research code for forecasting next-week minimum and maximum stock returns on
-Vietnamese HOSE equities. The project compares temporal baselines with
-graph-temporal neural models, focusing on whether cross-stock graph structure
-improves interval-style return forecasts on a small financial dataset.
+Benchmarking code for forecasting next-week minimum and maximum stock returns
+on Vietnamese HOSE equities. The project compares temporal sequence models
+with spatial-temporal-like graph variants, focusing on whether cross-stock
+structure improves interval-style return forecasts on a small financial
+dataset.
 
 ## Highlights
 
@@ -13,6 +14,7 @@ improves interval-style return forecasts on a small financial dataset.
 - Graph settings: static sector graph, dynamic correlation graph, and hybrid graph variants.
 - Evaluation: walk-forward / cross-validation protocols with seed-based repeated runs.
 - Tuning: Optuna search with saved manifests for reproducibility.
+- Framing: GAT-LSTM and GCN-LSTM are benchmarked model families, not the only focus of the repository.
 
 ## Current Result Snapshot
 
@@ -100,10 +102,10 @@ baseline feature set contains:
 - `f_return`: weekly log return.
 - `f_skew`: distribution skewness of within-week returns.
 
-The model receives a rolling historical window and predicts the following
-week's minimum and maximum return for each stock. The graph-temporal models
-first aggregate cross-stock information through a graph layer, then model
-temporal dependencies with recurrent layers.
+Each model receives a rolling historical window and predicts the following
+week's minimum and maximum return for each stock. The spatial-temporal-like
+variants first aggregate cross-stock information through graph layers, then
+model temporal dependencies with recurrent layers.
 
 ## Reproducible Experiment Helpers
 

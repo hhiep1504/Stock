@@ -54,7 +54,7 @@ def _print_graph_result(result: Any) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="GAT-LSTM training and benchmark entrypoint")
+    parser = argparse.ArgumentParser(description="Spatial-temporal stock return benchmark entrypoint")
     parser.add_argument("--config", type=str, default=None, help="Path to an experiment JSON config")
     parser.add_argument(
         "--mode",
