@@ -32,7 +32,10 @@ MAE across repeated walk-forward runs. Lower is better.
 | 7 | Temporal GCN | hybrid | 0.025437 | 27 |
 | 8 | GCN-LSTM | hybrid | 0.026975 | 27 |
 
-![Benchmark results](docs/figures/benchmark_results.png)
+The interval view below is the style used to inspect forecast behaviour: the
+actual min-max return band is plotted against a walk-forward forecast band.
+
+![Actual vs forecast return interval](docs/figures/interval_forecast_band.svg)
 
 ## Repository Layout
 
@@ -122,6 +125,12 @@ Windows users can run the feature-window sweep with:
 
 ```powershell
 .\scripts\run_feature_window_sweep_3090.ps1 -Quick
+```
+
+Regenerate the README interval figure:
+
+```bash
+python scripts/plot_interval_forecast_figure.py --ticker DXG --weeks 44 --forecast-window 8
 ```
 
 ## Notes

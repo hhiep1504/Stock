@@ -62,3 +62,4 @@ dataset/*
 # Keep curated figures used by README/docs
 !docs/figures/
 !docs/figures/*.png
+!docs/figures/*.svg
